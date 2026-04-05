@@ -279,7 +279,8 @@ oc-serve() {
         fi
     fi
 
-    local permission="${OPENCODE_HEADLESS_PERMISSION:-'{\"*\":\"allow\"}'}"
+    local _default_permission='{"*":"allow"}'
+    local permission="${OPENCODE_HEADLESS_PERMISSION:-$_default_permission}"
 
     echo "Starting OpenCode server on port $port"
     echo "  Attach with: opencode attach http://localhost:$port"
@@ -352,9 +353,14 @@ _find_free_port() {
     local port=$OPENCODE_BASE_PORT
     local max=$((OPENCODE_BASE_PORT + OPENCODE_PORT_RANGE))
     while [ "$port" -le "$max" ]; do
-        if ! lsof -i :"$port" &>/dev/null 2>&1; then
-            echo "$port"
-            return
+        # Use ss (always available on Ubuntu) with lsof as a fallback
+        if command -v ss &>/dev/null; then
+            ss -tlnp 2>/dev/null | grep -q ":${port} " || { echo "$port"; return; }
+        elif command -v lsof &>/dev/null; then
+            lsof -i :"$port" &>/dev/null 2>&1 || { echo "$port"; return; }
+        else
+            # Last resort: try binding
+            (echo "" >/dev/tcp/127.0.0.1/"$port") 2>/dev/null || { echo "$port"; return; }
         fi
         port=$((port + 1))
     done

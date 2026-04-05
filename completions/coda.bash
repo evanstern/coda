@@ -38,6 +38,13 @@ _coda_projects() {
     done
 }
 
+_coda_project_branches() {
+    local name="${1:-}"
+    local dir="${PROJECTS_DIR:-$HOME/projects}/$name"
+    [ -d "$dir/.bare" ] || return
+    git -C "$dir" branch --format='%(refname:short)' 2>/dev/null
+}
+
 _coda_layouts() {
     local coda_dir="${_CODA_DIR:-}"
     [ -z "$coda_dir" ] && return
@@ -96,7 +103,7 @@ _coda_complete() {
         2)
             case "${words[1]}" in
                 project)
-                    COMPREPLY=($(compgen -W "add ls" -- "$cur"))
+                    COMPREPLY=($(compgen -W "add workon ls" -- "$cur"))
                     ;;
                 feature)
                     COMPREPLY=($(compgen -W "start done ls" -- "$cur"))
@@ -154,8 +161,12 @@ _coda_complete() {
                 project)
                     case "${words[2]}" in
                         add)
-                            # Directory completion for local paths
                             COMPREPLY=($(compgen -d -- "$cur"))
+                            ;;
+                        workon)
+                            local projects
+                            projects=$(_coda_projects)
+                            COMPREPLY=($(compgen -W "$projects" -- "$cur"))
                             ;;
                     esac
                     ;;
@@ -166,16 +177,23 @@ _coda_complete() {
                 feature)
                     case "${words[2]}" in
                         start)
-                            # base branch argument
                             local branches
                             branches=$(_coda_branches)
                             COMPREPLY=($(compgen -W "$branches" -- "$cur"))
                             ;;
                         done)
-                            # project name argument
                             local projects
                             projects=$(_coda_projects)
                             COMPREPLY=($(compgen -W "$projects" -- "$cur"))
+                            ;;
+                    esac
+                    ;;
+                project)
+                    case "${words[2]}" in
+                        workon)
+                            local branches
+                            branches=$(_coda_project_branches "${words[3]}")
+                            COMPREPLY=($(compgen -W "$branches" -- "$cur"))
                             ;;
                     esac
                     ;;

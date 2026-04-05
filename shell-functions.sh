@@ -245,10 +245,11 @@ _coda_auth() {
 _coda_project() {
     local subcmd="${1:-}"
     case "$subcmd" in
-        add)  shift; _coda_project_add "$@" ;;
-        ls)   _coda_project_ls ;;
-        ""|help) echo "Usage: coda project <add|ls>" ;;
-        *)    echo "Unknown project subcommand: $subcmd"; echo "Usage: coda project <add|ls>"; return 1 ;;
+        add)    shift; _coda_project_add "$@" ;;
+        workon) shift; _coda_project_workon "$@" ;;
+        ls)     _coda_project_ls ;;
+        ""|help) echo "Usage: coda project <add|workon|ls>" ;;
+        *)    echo "Unknown project subcommand: $subcmd"; echo "Usage: coda project <add|workon|ls>"; return 1 ;;
     esac
 }
 
@@ -297,6 +298,39 @@ _coda_project_add() {
     echo ""
     echo "Project ready: $project_dir"
     echo "  cd $project_dir/$DEFAULT_BRANCH"
+}
+
+# coda project workon <name> [branch]
+_coda_project_workon() {
+    local name="${1:-}"
+    local branch="${2:-$DEFAULT_BRANCH}"
+
+    if [ -z "$name" ]; then
+        echo "Usage: coda project workon <name> [branch]"
+        return 1
+    fi
+
+    local project_dir="$PROJECTS_DIR/$name"
+
+    if [ ! -d "$project_dir/.bare" ]; then
+        echo "Not a coda project: $name"
+        echo "Add it first: coda project add <repo-url> $name"
+        return 1
+    fi
+
+    local worktree_dir="$project_dir/$branch"
+
+    if [ ! -d "$worktree_dir" ]; then
+        echo "Creating worktree: $branch"
+        if git -C "$project_dir" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null ||
+           git -C "$project_dir" show-ref --verify --quiet "refs/remotes/${GIT_REMOTE}/$branch" 2>/dev/null; then
+            git -C "$project_dir" worktree add "$worktree_dir" "$branch"
+        else
+            git -C "$project_dir" worktree add -b "$branch" "$worktree_dir" "$DEFAULT_BRANCH"
+        fi
+    fi
+
+    _coda_attach "${name}--${branch}" "$worktree_dir"
 }
 
 # coda project ls
@@ -536,8 +570,9 @@ USAGE
   coda serve [port]           Start OpenCode in headless server mode
   coda auth                   Wire Claude Code credentials to OpenCode
 
-  coda project add <url> [name]   Clone a repo as a bare project
-  coda project ls                 List projects in PROJECTS_DIR
+  coda project add <url> [name]        Clone a repo as a bare project
+  coda project workon <name> [branch]  Open a project session (create worktree if needed)
+  coda project ls                      List projects in PROJECTS_DIR
 
   coda feature start <branch> [base] [project]   New worktree + session
   coda feature done  <branch> [project]          Teardown worktree + session

@@ -32,9 +32,16 @@ _coda_projects() {
     [[ -d "$dir" ]] || return
     for d in "$dir"/*/; do
         if [[ -d "${d}.bare" ]] || [[ -f "${d}.git" ]]; then
-            echo "${d:t}"  # basename in zsh
+            echo "${d:t}"
         fi
     done
+}
+
+_coda_project_branches() {
+    local name="${1:-}"
+    local dir="${PROJECTS_DIR:-$HOME/projects}/$name"
+    [[ -d "$dir/.bare" ]] || return
+    git -C "$dir" branch --format='%(refname:short)' 2>/dev/null
 }
 
 _coda_layouts() {
@@ -108,7 +115,8 @@ _coda_project_args() {
     local state line
     _arguments -C \
         '1: :->subcmd' \
-        '*: :->rest' \
+        '2: :->arg1' \
+        '3: :->arg2' \
         && return 0
 
     case $state in
@@ -116,13 +124,26 @@ _coda_project_args() {
             local -a subcmds
             subcmds=(
                 'add:clone a repo as a bare project'
+                'workon:open a project session (create worktree if needed)'
                 'ls:list all projects'
             )
             _describe 'project subcommand' subcmds
             ;;
-        rest)
+        arg1)
             case $line[1] in
                 add) _urls ;;
+                workon)
+                    local projects=($(_coda_projects))
+                    _describe 'project' projects
+                    ;;
+            esac
+            ;;
+        arg2)
+            case $line[1] in
+                workon)
+                    local branches=($(_coda_project_branches "$line[2]"))
+                    _describe 'branch' branches
+                    ;;
             esac
             ;;
     esac

@@ -13,6 +13,7 @@
 #   SKIP_TAILSCALE=true      Skip Tailscale installation
 #   SKIP_OPENCODE=true       Skip OpenCode installation
 #   SKIP_CLAUDE=true         Skip Claude Code CLI installation
+#   SKIP_OHMYPOSH=true       Skip Oh My Posh installation
 #   NODE_MAJOR_VERSION=20    Node.js major version (default: 20)
 #   NVIM_MIN_VERSION=0.11.0  Minimum acceptable Neovim version
 #   PROJECTS_DIR=~/projects  Where git repos live
@@ -43,6 +44,7 @@ PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
 SKIP_TAILSCALE="${SKIP_TAILSCALE:-false}"
 SKIP_OPENCODE="${SKIP_OPENCODE:-false}"
 SKIP_CLAUDE="${SKIP_CLAUDE:-false}"
+SKIP_OHMYPOSH="${SKIP_OHMYPOSH:-false}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -81,13 +83,14 @@ echo "  Projects dir    : ${PROJECTS_DIR}"
 echo "  Tailscale       : $([ "$SKIP_TAILSCALE" = "true" ] && echo "skip" || echo "install")"
 echo "  OpenCode        : $([ "$SKIP_OPENCODE"  = "true" ] && echo "skip" || echo "install")"
 echo "  Claude CLI      : $([ "$SKIP_CLAUDE"    = "true" ] && echo "skip" || echo "install")"
+echo "  Oh My Posh      : $([ "$SKIP_OHMYPOSH" = "true" ] && echo "skip" || echo "install")"
 echo ""
 
 # ===========================================================================
 # 1. System packages
 # ===========================================================================
 
-step "[1/9] System packages"
+step "[1/10] System packages"
 
 sudo apt-get update -qq
 sudo apt-get upgrade -y -qq
@@ -111,7 +114,7 @@ ok "Core packages installed"
 # 2. Neovim
 # ===========================================================================
 
-step "[2/9] Neovim (>= ${NVIM_MIN_VERSION})"
+step "[2/10] Neovim (>= ${NVIM_MIN_VERSION})"
 
 NVIM_INSTALLED_VERSION=""
 if command -v nvim &>/dev/null; then
@@ -146,7 +149,7 @@ fi
 # 3. Node.js
 # ===========================================================================
 
-step "[3/9] Node.js ${NODE_MAJOR_VERSION}"
+step "[3/10] Node.js ${NODE_MAJOR_VERSION}"
 
 INSTALLED_NODE_MAJOR=0
 if command -v node &>/dev/null; then
@@ -171,7 +174,7 @@ fi
 # 4. OpenCode
 # ===========================================================================
 
-step "[4/9] OpenCode"
+step "[4/10] OpenCode"
 
 if [ "$SKIP_OPENCODE" = "true" ]; then
     info "Skipping (SKIP_OPENCODE=true)"
@@ -187,7 +190,7 @@ fi
 # 5. Claude Code CLI
 # ===========================================================================
 
-step "[5/9] Claude Code CLI"
+step "[5/10] Claude Code CLI"
 
 if [ "$SKIP_CLAUDE" = "true" ]; then
     info "Skipping (SKIP_CLAUDE=true)"
@@ -203,7 +206,7 @@ fi
 # 6. fzf
 # ===========================================================================
 
-step "[6/9] fzf"
+step "[6/10] fzf"
 
 if command -v fzf &>/dev/null; then
     ok "fzf $(fzf --version 2>/dev/null | head -1) — already installed"
@@ -222,10 +225,27 @@ else
 fi
 
 # ===========================================================================
-# 7. tmux Plugin Manager (TPM)
+# 7. Oh My Posh
 # ===========================================================================
 
-step "[7/9] tmux Plugin Manager (TPM)"
+step "[7/10] Oh My Posh"
+
+if [ "$SKIP_OHMYPOSH" = "true" ]; then
+    info "Skipping (SKIP_OHMYPOSH=true)"
+elif command -v oh-my-posh &>/dev/null; then
+    ok "oh-my-posh $(oh-my-posh version 2>/dev/null) — already installed"
+else
+    info "Installing Oh My Posh..."
+    mkdir -p "$HOME/.local/bin"
+    curl -fsSL https://ohmyposh.dev/install.sh | bash -s -- -d "$HOME/.local/bin"
+    ok "Oh My Posh installed to ~/.local/bin"
+fi
+
+# ===========================================================================
+# 8. tmux Plugin Manager (TPM)
+# ===========================================================================
+
+step "[8/10] tmux Plugin Manager (TPM)"
 
 TPM_DIR="$HOME/.tmux/plugins/tpm"
 
@@ -243,10 +263,10 @@ else
 fi
 
 # ===========================================================================
-# 8. Tailscale
+# 9. Tailscale
 # ===========================================================================
 
-step "[8/9] Tailscale"
+step "[9/10] Tailscale"
 
 if [ "$SKIP_TAILSCALE" = "true" ]; then
     info "Skipping (SKIP_TAILSCALE=true)"
@@ -259,10 +279,10 @@ else
 fi
 
 # ===========================================================================
-# 9. Config files, shell integration, SSH
+# 10. Config files, shell integration, SSH
 # ===========================================================================
 
-step "[9/9] Config files, completions, and man page"
+step "[10/10] Config files, completions, and man page"
 
 # --- tmux config ---
 
@@ -335,6 +355,28 @@ if [ -f "$HOME/.zshrc" ]; then
     else
         printf '\n# coda tab completion\n%s\n%s\n' "$FPATH_LINE" "$COMPINIT_LINE" >> "$HOME/.zshrc"
         ok "Zsh completion added to ~/.zshrc"
+    fi
+fi
+
+# --- Oh My Posh prompt ---
+
+if [ "$SKIP_OHMYPOSH" != "true" ] && command -v oh-my-posh &>/dev/null; then
+    if [ -f "$HOME/.bashrc" ]; then
+        if grep -qF "oh-my-posh init" "$HOME/.bashrc" 2>/dev/null; then
+            ok "Oh My Posh — already initialized in ~/.bashrc"
+        else
+            printf '\n# Oh My Posh prompt\nexport PATH="$HOME/.local/bin:$PATH"\neval "$(oh-my-posh init bash)"\n' >> "$HOME/.bashrc"
+            ok "Oh My Posh initialized in ~/.bashrc"
+        fi
+    fi
+
+    if [ -f "$HOME/.zshrc" ]; then
+        if grep -qF "oh-my-posh init" "$HOME/.zshrc" 2>/dev/null; then
+            ok "Oh My Posh — already initialized in ~/.zshrc"
+        else
+            printf '\n# Oh My Posh prompt\nexport PATH="$HOME/.local/bin:$PATH"\neval "$(oh-my-posh init zsh)"\n' >> "$HOME/.zshrc"
+            ok "Oh My Posh initialized in ~/.zshrc"
+        fi
     fi
 fi
 

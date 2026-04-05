@@ -262,7 +262,7 @@ fi
 # 9. Config files, shell integration, SSH
 # ===========================================================================
 
-step "[9/9] Config files and shell integration"
+step "[9/9] Config files, completions, and man page"
 
 # --- tmux config ---
 
@@ -290,7 +290,7 @@ else
     ok "~/.config/opencode/tui.json installed"
 fi
 
-# --- Shell functions ---
+# --- Shell functions and completions ---
 
 # Prefer .bashrc on Ubuntu (default shell); fall back to .zshrc
 SHELL_RC=""
@@ -306,12 +306,48 @@ if [ -n "$SHELL_RC" ]; then
     if grep -qF "$SOURCE_LINE" "$SHELL_RC" 2>/dev/null; then
         ok "Shell functions — already sourced in $SHELL_RC"
     else
-        printf '\n# Remote dev server shell functions\n%s\n' "$SOURCE_LINE" >> "$SHELL_RC"
+        printf '\n# coda — OpenCode session manager\n%s\n' "$SOURCE_LINE" >> "$SHELL_RC"
         ok "Shell functions added to $SHELL_RC"
     fi
 else
     info "No shell RC found. Add this line manually:"
     info "  $SOURCE_LINE"
+fi
+
+# --- Tab completion ---
+
+if [ -f "$HOME/.bashrc" ]; then
+    COMPLETION_LINE="source $SCRIPT_DIR/completions/coda.bash"
+    if grep -qF "$COMPLETION_LINE" "$HOME/.bashrc" 2>/dev/null; then
+        ok "Bash completion — already installed"
+    else
+        printf '\n# coda tab completion\n%s\n' "$COMPLETION_LINE" >> "$HOME/.bashrc"
+        ok "Bash completion added to ~/.bashrc"
+    fi
+fi
+
+if [ -f "$HOME/.zshrc" ]; then
+    # For zsh, add completions dir to fpath before compinit
+    FPATH_LINE="fpath=($SCRIPT_DIR/completions \$fpath)"
+    COMPINIT_LINE="autoload -Uz compinit && compinit"
+    if grep -qF "completions/coda" "$HOME/.zshrc" 2>/dev/null; then
+        ok "Zsh completion — already installed"
+    else
+        printf '\n# coda tab completion\n%s\n%s\n' "$FPATH_LINE" "$COMPINIT_LINE" >> "$HOME/.zshrc"
+        ok "Zsh completion added to ~/.zshrc"
+    fi
+fi
+
+# --- Man page ---
+
+MAN_DIR="/usr/local/share/man/man1"
+if sudo mkdir -p "$MAN_DIR" 2>/dev/null; then
+    sudo cp "$SCRIPT_DIR/man/coda.1" "$MAN_DIR/coda.1"
+    sudo mandb -q 2>/dev/null || true
+    ok "Man page installed (man coda)"
+else
+    info "Could not install man page (no sudo?). Install manually:"
+    info "  sudo cp $SCRIPT_DIR/man/coda.1 /usr/local/share/man/man1/"
 fi
 
 # --- SSH server keepalive ---

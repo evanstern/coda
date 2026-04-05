@@ -1,0 +1,369 @@
+.TH CODA 1 "2026-04-05" "remote-dev-server" "User Commands"
+.
+.SH NAME
+coda \- OpenCode session and project manager
+.
+.SH SYNOPSIS
+.B coda
+.RI [ name \ [ dir ]]
+.br
+.B coda
+.B ls
+.br
+.B coda
+.B switch
+.br
+.B coda
+.B serve
+.RI [ port ]
+.br
+.B coda
+.B auth
+.br
+.B coda
+.B project
+.B add
+.I repo-url
+.RI [ name ]
+.br
+.B coda
+.B project
+.B ls
+.br
+.B coda
+.B feature
+.B start
+.I branch
+.RI [ base-branch \ [ project-name ]]
+.br
+.B coda
+.B feature
+.B done
+.I branch
+.RI [ project-name ]
+.br
+.B coda
+.B feature
+.B ls
+.br
+.B coda
+.B help
+.
+.SH DESCRIPTION
+.B coda
+is a shell-function toolkit that combines OpenCode AI agents, tmux persistent
+sessions, and git worktrees into a single workflow.
+Each project lives as a bare git repository with multiple worktrees — one per
+branch — each with its own isolated OpenCode agent running in its own tmux session.
+.PP
+All functions are sourced into the shell from
+.IR shell-functions.sh .
+Configuration is read from
+.I .env
+in the same directory.
+.
+.SH SUBCOMMANDS
+.
+.SS Session management
+.
+.TP
+.B coda \fR[\fIname\fR] [\fIdir\fR]
+Attach to an existing tmux session or create a new one running
+.BR opencode (1).
+.I name
+defaults to the basename of the current directory.
+.I dir
+defaults to the current directory.
+Session names are prefixed with
+.B SESSION_PREFIX
+(default:
+.IR coda- ).
+Passing a name that already includes the prefix is safe — it is stripped
+automatically.
+If already inside tmux, switches to the session rather than creating a nested
+attach.
+Enforces
+.B MAX_CONCURRENT_SESSIONS
+(default: 5).
+.
+.TP
+.B coda ls
+List all active
+.B coda
+sessions (those whose names match
+.BR SESSION_PREFIX ).
+.
+.TP
+.B coda switch
+Open an interactive
+.BR fzf (1)
+picker showing all tmux sessions.
+The right pane shows a live preview of the last 30 lines of each session.
+Press
+.B Enter
+to switch; press
+.B Esc
+to cancel.
+Also available as
+.B prefix\~+\~f
+inside tmux.
+.
+.SS Headless mode
+.
+.TP
+.B coda serve \fR[\fIport\fR]
+Start
+.B opencode serve
+on
+.I port
+(or the next free port starting at
+.BR OPENCODE_BASE_PORT ).
+The permission policy is taken from
+.B OPENCODE_HEADLESS_PERMISSION
+(default:
+.IR \[lq]{\[dq]*\[dq]:\[dq]allow\[dq]}\[rq] ,
+which auto-approves all actions).
+.sp
+Once running, attach a TUI with:
+.RS
+.EX
+opencode attach http://localhost:\fIport\fP
+.EE
+.RE
+or submit tasks programmatically via the OpenCode HTTP API.
+.
+.SS Authentication
+.
+.TP
+.B coda auth
+Install the
+.B opencode-claude-auth
+plugin globally, which lets OpenCode reuse the OAuth credentials written by
+.BR "claude auth login"
+to
+.IR ~/.claude/.credentials.json .
+Run once after
+.BR "claude auth login" .
+Re-run if Claude auth expires.
+.
+.SS Project management
+.
+.TP
+.B coda project add \fIrepo-url\fR [\fIname\fR]
+Clone
+.I repo-url
+as a bare repository and create the initial
+.B DEFAULT_BRANCH
+worktree.
+The project is stored under
+.IR PROJECTS_DIR / name /
+with the following layout:
+.RS
+.EX
+PROJECTS_DIR/name/
+  .bare/        (all git objects)
+  .git          (pointer: "gitdir: ./.bare")
+  main/         (initial worktree)
+.EE
+.RE
+If the project already exists, fetches the latest changes and shows current
+worktrees instead.
+.
+.TP
+.B coda project ls
+List all coda-managed projects in
+.BR PROJECTS_DIR .
+.
+.SS Feature worktrees
+.
+.TP
+.B coda feature start \fIbranch\fR [\fIbase-branch\fR] [\fIproject-name\fR]
+Create a new git worktree on a new branch and open an OpenCode tmux session
+inside it.
+Must be run from inside a project directory (any worktree or the project root).
+.I base-branch
+defaults to
+.BR DEFAULT_BRANCH .
+.I project-name
+defaults to the project root directory basename.
+.sp
+If the worktree already exists, attaches to the existing session without
+creating a duplicate.
+.sp
+Session name:
+.IB SESSION_PREFIX project-name -- branch
+.sp
+Worktree path:
+.IB PROJECTS_DIR / project / branch /
+.
+.TP
+.B coda feature done \fIbranch\fR [\fIproject-name\fR]
+Tear down a feature in three steps:
+.RS
+.IP 1. 3
+Kill the tmux session.
+.IP 2.
+Remove the git worktree.
+.IP 3.
+Delete the local branch.
+.RE
+.sp
+.B Warning:
+the branch is deleted regardless of merge status.
+Merge or push your changes before running this command.
+.
+.TP
+.B coda feature ls
+Run
+.B git worktree list
+for the project root detected from the current directory.
+.
+.SS Help
+.
+.TP
+.B coda help
+Print a short usage summary.
+.
+.SH CONFIGURATION
+Configuration is read from
+.I .env
+in the
+.B remote-dev-server
+directory (created from
+.I .env.example
+on first
+.BR install.sh\ run ).
+All variables can also be set in the environment before sourcing
+.IR shell-functions.sh .
+.
+.TS
+l l l.
+Variable	Default	Description
+_
+PROJECTS_DIR	~/projects	Root dir for repos
+SESSION_PREFIX	coda-	tmux session name prefix
+DEFAULT_BRANCH	main	Branch for new worktrees
+GIT_REMOTE	origin	Git remote name
+OPENCODE_BASE_PORT	4096	First port for \fBcoda serve\fR
+OPENCODE_PORT_RANGE	10	Ports to scan
+MAX_CONCURRENT_SESSIONS	5	Max parallel sessions
+OPENCODE_HEADLESS_PERMISSION	{"*":"allow"}	Permission policy for serve
+AUTO_ATTACH_TMUX	true	Auto-attach on SSH login
+DEFAULT_TMUX_SESSION	default	Session name for auto-attach
+.TE
+.
+.SH EXAMPLES
+.
+.SS First-time setup
+.EX
+\&./install.sh
+sudo tailscale up
+claude auth login
+coda auth
+.EE
+.
+.SS Add a project and start working
+.EX
+coda project add git@github.com:user/myapp.git
+cd ~/projects/myapp/main
+coda
+.EE
+.
+.SS Feature branch workflow
+.EX
+cd ~/projects/myapp/main
+coda feature start auth
+# ... give OpenCode a task inside the session ...
+coda ls
+coda switch
+coda feature done auth
+.EE
+.
+.SS Running multiple agents in parallel
+.EX
+cd ~/projects/myapp/main
+coda feature start auth
+coda feature start payments
+coda feature start docs
+coda switch          # pick one to check on
+.EE
+.
+.SS Headless background work
+.EX
+coda serve           # starts on first free port
+opencode attach http://localhost:4096
+.EE
+.
+.SS Sending tasks from the command line (no attach needed)
+.EX
+tmux send-keys -t coda-myapp--auth \e
+    "Add rate limiting to the login endpoint" Enter
+tmux capture-pane -t coda-myapp--auth -p | tail -20
+.EE
+.
+.SH FILES
+.TP
+.I ~/remote-dev-server/shell-functions.sh
+Shell functions sourced into bash or zsh.
+.TP
+.I ~/remote-dev-server/.env
+Local configuration (git-ignored).
+.TP
+.I ~/remote-dev-server/.env.example
+Configuration template.
+.TP
+.I ~/remote-dev-server/completions/coda.bash
+Bash tab-completion script.
+.TP
+.I ~/remote-dev-server/completions/coda.zsh
+Zsh tab-completion script.
+.TP
+.I ~/.tmux.conf
+tmux configuration (installed by
+.BR install.sh ).
+.TP
+.I ~/.config/opencode/tui.json
+OpenCode TUI keybind configuration (installed by
+.BR install.sh ).
+.TP
+.I ~/.claude/.credentials.json
+Claude Code OAuth credentials (written by
+.BR "claude auth login" ).
+.
+.SH ENVIRONMENT
+In addition to the
+.I .env
+variables listed under
+.BR CONFIGURATION ,
+the following environment variables influence behaviour:
+.TP
+.B TMUX
+If set, indicates the shell is already inside a tmux session.
+.B coda
+uses
+.B switch-client
+instead of
+.B attach
+when this is set.
+.TP
+.B SSH_CONNECTION
+If set (i.e. the shell was started via SSH), and
+.B AUTO_ATTACH_TMUX=true
+and
+.B TMUX
+is unset,
+.B coda
+auto-attaches to
+.B DEFAULT_TMUX_SESSION
+on shell start.
+.
+.SH SEE ALSO
+.BR opencode (1),
+.BR tmux (1),
+.BR git-worktree (1),
+.BR fzf (1),
+.BR mosh (1),
+.BR tailscale (1)
+.
+.SH BUGS
+Report issues at https://github.com/evanstern/remote-dev-server

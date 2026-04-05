@@ -3,7 +3,7 @@
 # Sourced automatically by install.sh via ~/.zshrc
 #
 # Manual install (add to fpath before compinit):
-#   fpath=(/path/to/remote-dev-server/completions $fpath)
+#   fpath=(/path/to/coda/completions $fpath)
 #   autoload -Uz compinit && compinit
 
 _coda_sessions() {

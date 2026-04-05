@@ -2,7 +2,7 @@
 # Sourced automatically by install.sh via ~/.bashrc
 #
 # Manual install:
-#   source /path/to/remote-dev-server/completions/coda.bash
+#   source /path/to/coda/completions/coda.bash
 
 _coda_sessions() {
     # Active tmux session names (strip the prefix for user-facing display)

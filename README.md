@@ -1,4 +1,4 @@
-# Remote Dev Server
+# Coda
 
 A headless development server running multiple [OpenCode](https://opencode.ai) AI coding agents
 in parallel across isolated git worktrees, accessible from anywhere via Tailscale + mosh.
@@ -42,8 +42,8 @@ You provision a VM (on Proxmox, or any Ubuntu host), run `./install.sh`, and get
 On a fresh Ubuntu Server 24.04 VM, clone this repo and run:
 
 ```bash
-git clone <this-repo-url> ~/remote-dev-server
-cd ~/remote-dev-server
+git clone <this-repo-url> ~/coda
+cd ~/coda
 chmod +x install.sh
 ./install.sh
 ```
@@ -464,7 +464,7 @@ every 15 minutes and restores them on reboot.
 ## File Structure
 
 ```
-remote-dev-server/
+coda/
 |-- install.sh              Full install: packages → config wiring
 |-- shell-functions.sh      The coda command (sourced into your shell)
 |-- completions/

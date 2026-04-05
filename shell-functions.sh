@@ -3,7 +3,7 @@
 # shell-functions.sh — coda: OpenCode session and project manager
 #
 # Source in .bashrc or .zshrc:
-#   source ~/remote-dev-server/shell-functions.sh
+#   source ~/coda/shell-functions.sh
 
 _CODA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

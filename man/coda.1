@@ -1,4 +1,4 @@
-.TH CODA 1 "2026-04-05" "remote-dev-server" "User Commands"
+.TH CODA 1 "2026-04-05" "coda" "User Commands"
 .
 .SH NAME
 coda \- OpenCode session and project manager
@@ -228,7 +228,7 @@ Print a short usage summary.
 Configuration is read from
 .I .env
 in the
-.B remote-dev-server
+.B coda
 directory (created from
 .I .env.example
 on first
@@ -303,19 +303,19 @@ tmux capture-pane -t coda-myapp--auth -p | tail -20
 .
 .SH FILES
 .TP
-.I ~/remote-dev-server/shell-functions.sh
+.I ~/coda/shell-functions.sh
 Shell functions sourced into bash or zsh.
 .TP
-.I ~/remote-dev-server/.env
+.I ~/coda/.env
 Local configuration (git-ignored).
 .TP
-.I ~/remote-dev-server/.env.example
+.I ~/coda/.env.example
 Configuration template.
 .TP
-.I ~/remote-dev-server/completions/coda.bash
+.I ~/coda/completions/coda.bash
 Bash tab-completion script.
 .TP
-.I ~/remote-dev-server/completions/coda.zsh
+.I ~/coda/completions/coda.zsh
 Zsh tab-completion script.
 .TP
 .I ~/.tmux.conf
@@ -366,4 +366,4 @@ on shell start.
 .BR tailscale (1)
 .
 .SH BUGS
-Report issues at https://github.com/evanstern/remote-dev-server
+Report issues at https://github.com/evanstern/coda

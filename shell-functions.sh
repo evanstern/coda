@@ -41,14 +41,20 @@ coda() {
     case "$subcmd" in
         ls)               _coda_ls ;;
         switch)           _coda_switch ;;
-        attach)           shift; _coda_attach "$@" ;;
+        attach)           shift
+                          if [ -n "${1:-}" ]; then
+                              _coda_attach "${1#"$SESSION_PREFIX"}" "${@:2}"
+                          else
+                              _coda_attach
+                          fi
+                          ;;
         auth)             _coda_auth ;;
         serve)            shift; _coda_serve "$@" ;;
         project)          shift; _coda_project "$@" ;;
         feature)          shift; _coda_feature "$@" ;;
         help|--help|-h)   _coda_help ;;
         "")               _coda_attach ;;
-        *)                _coda_attach "$@" ;;
+        *)                _coda_attach "${1#"$SESSION_PREFIX"}" "${@:2}" ;;
     esac
 }
 
@@ -59,9 +65,6 @@ coda() {
 _coda_attach() {
     local name="${1:-$(basename "$PWD")}"
     local dir="${2:-$PWD}"
-
-    # Strip prefix if the caller already included it (e.g. coda coda-myapp)
-    name="${name#"$SESSION_PREFIX"}"
     local session="${SESSION_PREFIX}${name}"
 
     if ! tmux has-session -t "$session" 2>/dev/null; then

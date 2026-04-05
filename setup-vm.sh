@@ -27,7 +27,7 @@ NODE_MAJOR_VERSION="${NODE_MAJOR_VERSION:-20}"
 NVIM_MIN_VERSION="${NVIM_MIN_VERSION:-0.11.0}"
 PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
 
-echo "=== Remote Dev Server Setup ==="
+echo "=== Coda Setup ==="
 echo ""
 echo "Node.js version: $NODE_MAJOR_VERSION"
 echo "Neovim min ver:  >= ${NVIM_MIN_VERSION}"

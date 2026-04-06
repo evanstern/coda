@@ -315,6 +315,17 @@ else
     ok "~/.config/opencode/tui.json installed"
 fi
 
+# --- Helper scripts (tmux pane picker, etc.) ---
+
+mkdir -p "$HOME/.local/bin"
+for script in "$SCRIPT_DIR"/scripts/*; do
+    [ -f "$script" ] || continue
+    name="$(basename "${script%.sh}")"
+    cp "$script" "$HOME/.local/bin/$name"
+    chmod +x "$HOME/.local/bin/$name"
+done
+ok "Helper scripts installed to ~/.local/bin/"
+
 # --- Shell functions and completions ---
 
 # Prefer .bashrc on Ubuntu (default shell); fall back to .zshrc

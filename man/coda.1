@@ -109,9 +109,6 @@ Passing a name that already includes the prefix is safe — it is stripped
 automatically.
 If already inside tmux, switches to the session rather than creating a nested
 attach.
-Enforces
-.B MAX_CONCURRENT_SESSIONS
-(default: 5).
 .
 .TP
 .B coda ls
@@ -401,7 +398,6 @@ OPENCODE_PORT_RANGE	10	Ports to scan
 DEFAULT_LAYOUT	default	Default tmux layout
 CODA_LAYOUTS_DIR	~/.config/coda/layouts	User layout directory
 CODA_PROFILES_DIR	~/.config/coda/profiles	User profile directory
-MAX_CONCURRENT_SESSIONS	5	Max parallel sessions
 CODA_WATCH_INTERVAL	5	Watcher poll interval (seconds)
 CODA_WATCH_COOLDOWN	60	Min seconds between repeat notifications
 OPENCODE_HEADLESS_PERMISSION	{"*":"allow"}	Permission policy for serve

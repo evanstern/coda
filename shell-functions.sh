@@ -18,7 +18,6 @@ DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 GIT_REMOTE="${GIT_REMOTE:-origin}"
 OPENCODE_BASE_PORT="${OPENCODE_BASE_PORT:-4096}"
 OPENCODE_PORT_RANGE="${OPENCODE_PORT_RANGE:-10}"
-MAX_CONCURRENT_SESSIONS="${MAX_CONCURRENT_SESSIONS:-5}"
 AUTO_ATTACH_TMUX="${AUTO_ATTACH_TMUX:-true}"
 DEFAULT_TMUX_SESSION="${DEFAULT_TMUX_SESSION:-default}"
 DEFAULT_LAYOUT="${DEFAULT_LAYOUT:-default}"
@@ -116,15 +115,6 @@ _coda_attach() {
     fi
 
     if ! tmux has-session -t "$session" 2>/dev/null; then
-        local count
-        count=$(tmux list-sessions -F '#{session_name}' 2>/dev/null \
-            | grep -c "^${SESSION_PREFIX}" || true)
-
-        if [ "$count" -ge "$MAX_CONCURRENT_SESSIONS" ]; then
-            echo "At session limit ($MAX_CONCURRENT_SESSIONS). Use 'coda ls' to see running sessions."
-            return 1
-        fi
-
         _coda_load_layout "$layout" || return 1
 
         if declare -f _layout_init &>/dev/null; then
@@ -286,7 +276,16 @@ _coda_project_add() {
         git -C "$project_dir" fetch --all --quiet
         echo "Worktrees:"
         git -C "$project_dir" worktree list 2>/dev/null | sed 's/^/  /'
-        return 0
+
+        if [ ! -d "$project_dir/$DEFAULT_BRANCH" ]; then
+            git -C "$project_dir" worktree add \
+                "$project_dir/$DEFAULT_BRANCH" "$DEFAULT_BRANCH"
+        fi
+
+        echo ""
+        echo "Opening session in $project_dir/$DEFAULT_BRANCH"
+        _coda_attach "$name" "$project_dir/$DEFAULT_BRANCH"
+        return $?
     fi
 
     if [ -d "$project_dir" ]; then
@@ -312,7 +311,8 @@ _coda_project_add() {
 
     echo ""
     echo "Project ready: $project_dir"
-    echo "  cd $project_dir/$DEFAULT_BRANCH"
+    echo "Opening session in $project_dir/$DEFAULT_BRANCH"
+    _coda_attach "$name" "$project_dir/$DEFAULT_BRANCH"
 }
 
 # coda project workon <name> [branch]

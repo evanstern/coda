@@ -284,6 +284,23 @@ If the worktree already exists, attaches to the existing session.
 
 ---
 
+### `coda feature finish <branch> [project]`
+
+Commit all changes, push the branch, create a pull request, then tear down
+the worktree and session. Requires the `gh` CLI for PR creation.
+
+```bash
+cd ~/projects/myapp/main
+coda feature finish auth
+# Committing changes in auth...
+# Pushing auth...
+# Creating pull request...
+# Cleaning up feature: auth
+# Done.
+```
+
+---
+
 ### `coda feature done <branch> [project]`
 
 Tear down a feature completely.
@@ -387,8 +404,9 @@ Installed automatically by `install.sh` for both bash and zsh.
 
 ```
 coda <TAB>                     → ls switch serve auth project feature help
-coda feature <TAB>             → start done ls
+coda feature <TAB>             → start finish done ls
 coda feature start <TAB>       → [local git branches]
+coda feature finish <TAB>      → [branches with active worktrees]
 coda feature done <TAB>        → [branches with active worktrees]
 coda project <TAB>             → add ls
 coda switch                    → (no completion needed — interactive fzf)

@@ -168,6 +168,7 @@ _coda_feature_args() {
             local -a subcmds
             subcmds=(
                 'start:create a worktree and session for a branch'
+                'finish:commit, push, create PR, then teardown'
                 'done:teardown a worktree and its session'
                 'ls:list worktrees for the current project'
             )
@@ -179,7 +180,7 @@ _coda_feature_args() {
                     local branches=($(_coda_branches))
                     _describe 'branch' branches
                     ;;
-                done)
+                finish|done)
                     local branches=($(_coda_worktree_branches))
                     _describe 'worktree branch' branches
                     ;;
@@ -191,7 +192,7 @@ _coda_feature_args() {
                     local branches=($(_coda_branches))
                     _describe 'base branch' branches
                     ;;
-                done)
+                finish|done)
                     local projects=($(_coda_projects))
                     _describe 'project name' projects
                     ;;

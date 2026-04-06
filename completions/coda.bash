@@ -102,7 +102,7 @@ _coda_complete() {
                     COMPREPLY=($(compgen -W "add workon ls" -- "$cur"))
                     ;;
                 feature)
-                    COMPREPLY=($(compgen -W "start done ls" -- "$cur"))
+                    COMPREPLY=($(compgen -W "start finish done ls" -- "$cur"))
                     ;;
                 layout)
                     local layouts
@@ -162,8 +162,7 @@ _coda_complete() {
                             branches=$(_coda_branches)
                             COMPREPLY=($(compgen -W "$branches" -- "$cur"))
                             ;;
-                        done)
-                            # Suggest branches that have a worktree
+                        finish|done)
                             local branches
                             branches=$(_coda_worktree_branches)
                             COMPREPLY=($(compgen -W "$branches" -- "$cur"))
@@ -193,7 +192,7 @@ _coda_complete() {
                             branches=$(_coda_branches)
                             COMPREPLY=($(compgen -W "$branches" -- "$cur"))
                             ;;
-                        done)
+                        finish|done)
                             local projects
                             projects=$(_coda_projects)
                             COMPREPLY=($(compgen -W "$projects" -- "$cur"))

@@ -375,11 +375,12 @@ _coda_project_ls() {
 _coda_feature() {
     local subcmd="${1:-}"
     case "$subcmd" in
-        start) shift; _coda_feature_start "$@" ;;
-        done)  shift; _coda_feature_done "$@" ;;
-        ls)    _coda_feature_ls ;;
-        ""|help) echo "Usage: coda feature <start|done|ls>" ;;
-        *)    echo "Unknown feature subcommand: $subcmd"; echo "Usage: coda feature <start|done|ls>"; return 1 ;;
+        start)  shift; _coda_feature_start "$@" ;;
+        finish) shift; _coda_feature_finish "$@" ;;
+        done)   shift; _coda_feature_done "$@" ;;
+        ls)     _coda_feature_ls ;;
+        ""|help) echo "Usage: coda feature <start|finish|done|ls>" ;;
+        *)    echo "Unknown feature subcommand: $subcmd"; echo "Usage: coda feature <start|finish|done|ls>"; return 1 ;;
     esac
 }
 
@@ -419,6 +420,69 @@ _coda_feature_start() {
     git -C "$project_root" worktree add -b "$branch" "$worktree_dir" "$base"
 
     _coda_attach "${project_name}--${branch}" "$worktree_dir"
+}
+
+# coda feature finish <branch> [project]
+_coda_feature_finish() {
+    local branch="${1:-}"
+    local project_name="${2:-}"
+
+    if [ -z "$branch" ]; then
+        echo "Usage: coda feature finish <branch> [project-name]"
+        return 1
+    fi
+
+    local project_root
+    project_root=$(_coda_find_project_root)
+    if [ -z "$project_root" ]; then
+        echo "Not inside a coda project directory."
+        return 1
+    fi
+
+    if [ -z "$project_name" ]; then
+        project_name=$(basename "$project_root")
+    fi
+
+    local worktree_dir="$project_root/$branch"
+
+    if [ ! -d "$worktree_dir" ]; then
+        echo "No worktree found: $worktree_dir"
+        return 1
+    fi
+
+    if git -C "$worktree_dir" status --porcelain | grep -q .; then
+        echo "Committing changes in $branch..."
+        git -C "$worktree_dir" add -A
+        local msg
+        msg=$(git -C "$worktree_dir" diff --cached --stat | head -20)
+        git -C "$worktree_dir" commit -m "feat($branch): finalize feature
+
+Changes:
+$msg"
+    else
+        echo "No uncommitted changes in $branch."
+    fi
+
+    echo "Pushing $branch..."
+    git -C "$worktree_dir" push -u "$GIT_REMOTE" "$branch"
+
+    if command -v gh &>/dev/null; then
+        if ! gh pr view "$branch" --repo "$(git -C "$worktree_dir" remote get-url "$GIT_REMOTE")" &>/dev/null; then
+            echo "Creating pull request..."
+            gh pr create \
+                --head "$branch" \
+                --base "$DEFAULT_BRANCH" \
+                --title "feat($branch): finalize feature" \
+                --body "Automated PR created by \`coda feature finish\`." \
+                --repo "$(git -C "$worktree_dir" remote get-url "$GIT_REMOTE")"
+        else
+            echo "PR already exists for $branch."
+        fi
+    else
+        echo "gh CLI not found — skipping PR creation."
+    fi
+
+    _coda_feature_done "$branch" "$project_name"
 }
 
 # coda feature done <branch> [project]
@@ -818,8 +882,9 @@ USAGE
   coda project workon <name> [branch]  Open a project session (create worktree if needed)
   coda project ls                      List projects in PROJECTS_DIR
 
-  coda feature start <branch> [base] [project]   New worktree + session
-  coda feature done  <branch> [project]          Teardown worktree + session
+  coda feature start  <branch> [base] [project]  New worktree + session
+  coda feature finish <branch> [project]         Commit, push, PR, then teardown
+  coda feature done   <branch> [project]         Teardown worktree + session
   coda feature ls                                List worktrees for this project
 
   coda layout <name>                Apply a layout to the current session

@@ -221,6 +221,13 @@ Worktree path:
 .IB PROJECTS_DIR / project / branch /
 .
 .TP
+.B coda feature finish \fIbranch\fR [\fIproject-name\fR]
+Commit all changes, push the branch, create a pull request (requires
+.BR gh ),
+then tear down the worktree and session (same cleanup as
+.BR "coda feature done" ).
+.
+.TP
 .B coda feature done \fIbranch\fR [\fIproject-name\fR]
 Tear down a feature in three steps:
 .RS

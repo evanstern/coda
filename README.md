@@ -204,8 +204,6 @@ coda myapp ~/projects/myapp   # session in a specific directory
 
 - Strips the `coda-` prefix automatically if you type it (both work)
 - If already inside tmux, switches to the session instead of nesting
-- Enforces `MAX_CONCURRENT_SESSIONS` (default: 5)
-
 ---
 
 ### `coda ls`
@@ -448,7 +446,6 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `EDITOR` / `VISUAL` | `vim` | Editor for OpenCode `/editor` flows |
 | `OPENCODE_BASE_PORT` | `4096` | First port tried by `coda serve` |
 | `OPENCODE_PORT_RANGE` | `10` | Number of ports to scan |
-| `MAX_CONCURRENT_SESSIONS` | `5` | Cap on parallel sessions |
 | `OPENCODE_HEADLESS_PERMISSION` | `{"*":"allow"}` | Permission policy for `coda serve` |
 | `NODE_MAJOR_VERSION` | `20` | Node.js major version for install |
 | `CODA_WATCH_INTERVAL` | `5` | Watcher poll interval (seconds) |

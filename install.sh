@@ -176,6 +176,11 @@ fi
 
 step "[4/10] OpenCode"
 
+mkdir -p ~/.npm-global
+npm config set prefix '~/.npm-global'
+# Add to ~/.bashrc or ~/.zshrc:
+export PATH="$HOME/.npm-global/bin:$PATH"
+
 if [ "$SKIP_OPENCODE" = "true" ]; then
     info "Skipping (SKIP_OPENCODE=true)"
 elif command -v opencode &>/dev/null; then

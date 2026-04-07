@@ -59,10 +59,12 @@ configures everything in one pass:
 | 4 | OpenCode via `npm install -g opencode@latest` |
 | 5 | Claude Code CLI via `npm install -g @anthropic-ai/claude-code` |
 | 6 | fzf (fuzzy finder, binary install) |
-| 7 | Oh My Posh prompt theme engine (user install to `~/.local/bin`) |
-| 8 | tmux Plugin Manager (TPM) |
-| 9 | Tailscale |
-| 10 | Config files, tab completions, man page, Oh My Posh shell init, SSH keepalive, tmux plugins |
+| 7 | yazi (terminal file manager, used by four-pane layout) |
+| 8 | lazygit (terminal git UI, used by four-pane layout) |
+| 9 | Oh My Posh prompt theme engine (user install to `~/.local/bin`) |
+| 10 | tmux Plugin Manager (TPM) |
+| 11 | Tailscale |
+| 12 | Config files, tab completions, man page, Oh My Posh shell init, SSH keepalive, tmux plugins |
 
 To skip optional components:
 
@@ -71,6 +73,8 @@ SKIP_TAILSCALE=true ./install.sh
 SKIP_OPENCODE=true  ./install.sh
 SKIP_CLAUDE=true    ./install.sh
 SKIP_OHMYPOSH=true  ./install.sh
+SKIP_YAZI=true      ./install.sh
+SKIP_LAZYGIT=true   ./install.sh
 ```
 
 ### After install

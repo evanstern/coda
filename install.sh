@@ -14,6 +14,8 @@
 #   SKIP_OPENCODE=true       Skip OpenCode installation
 #   SKIP_CLAUDE=true         Skip Claude Code CLI installation
 #   SKIP_OHMYPOSH=true       Skip Oh My Posh installation
+#   SKIP_YAZI=true           Skip yazi file manager installation
+#   SKIP_LAZYGIT=true        Skip lazygit installation
 #   NODE_MAJOR_VERSION=20    Node.js major version (default: 20)
 #   NVIM_MIN_VERSION=0.11.0  Minimum acceptable Neovim version
 #   PROJECTS_DIR=~/projects  Where git repos live
@@ -56,6 +58,8 @@ SKIP_TAILSCALE="${SKIP_TAILSCALE:-false}"
 SKIP_OPENCODE="${SKIP_OPENCODE:-false}"
 SKIP_CLAUDE="${SKIP_CLAUDE:-false}"
 SKIP_OHMYPOSH="${SKIP_OHMYPOSH:-false}"
+SKIP_YAZI="${SKIP_YAZI:-false}"
+SKIP_LAZYGIT="${SKIP_LAZYGIT:-false}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -95,13 +99,15 @@ echo "  Tailscale       : $([ "$SKIP_TAILSCALE" = "true" ] && echo "skip" || ech
 echo "  OpenCode        : $([ "$SKIP_OPENCODE"  = "true" ] && echo "skip" || echo "install")"
 echo "  Claude CLI      : $([ "$SKIP_CLAUDE"    = "true" ] && echo "skip" || echo "install")"
 echo "  Oh My Posh      : $([ "$SKIP_OHMYPOSH" = "true" ] && echo "skip" || echo "install")"
+echo "  yazi            : $([ "$SKIP_YAZI"     = "true" ] && echo "skip" || echo "install")"
+echo "  lazygit         : $([ "$SKIP_LAZYGIT"  = "true" ] && echo "skip" || echo "install")"
 echo ""
 
 # ===========================================================================
 # 1. System packages
 # ===========================================================================
 
-step "[1/10] System packages"
+step "[1/12] System packages"
 
 sudo apt-get update -qq
 sudo apt-get upgrade -y -qq
@@ -125,7 +131,7 @@ ok "Core packages installed"
 # 2. Neovim
 # ===========================================================================
 
-step "[2/10] Neovim (>= ${NVIM_MIN_VERSION})"
+step "[2/12] Neovim (>= ${NVIM_MIN_VERSION})"
 
 NVIM_INSTALLED_VERSION=""
 if command -v nvim &>/dev/null; then
@@ -160,7 +166,7 @@ fi
 # 3. Node.js
 # ===========================================================================
 
-step "[3/10] Node.js ${NODE_MAJOR_VERSION}"
+step "[3/12] Node.js ${NODE_MAJOR_VERSION}"
 
 INSTALLED_NODE_MAJOR=0
 if command -v node &>/dev/null; then
@@ -185,7 +191,7 @@ fi
 # 4. OpenCode
 # ===========================================================================
 
-step "[4/10] OpenCode"
+step "[4/12] OpenCode"
 
 mkdir -p ~/.npm-global
 npm config set prefix '~/.npm-global'
@@ -206,7 +212,7 @@ fi
 # 5. Claude Code CLI
 # ===========================================================================
 
-step "[5/10] Claude Code CLI"
+step "[5/12] Claude Code CLI"
 
 if [ "$SKIP_CLAUDE" = "true" ]; then
     info "Skipping (SKIP_CLAUDE=true)"
@@ -222,7 +228,7 @@ fi
 # 6. fzf
 # ===========================================================================
 
-step "[6/10] fzf"
+step "[6/12] fzf"
 
 if command -v fzf &>/dev/null; then
     ok "fzf $(fzf --version 2>/dev/null | head -1) — already installed"
@@ -241,10 +247,71 @@ else
 fi
 
 # ===========================================================================
-# 7. Oh My Posh
+# 7. yazi (terminal file manager — used by four-pane layout)
 # ===========================================================================
 
-step "[7/10] Oh My Posh"
+step "[7/12] yazi"
+
+if [ "$SKIP_YAZI" = "true" ]; then
+    info "Skipping (SKIP_YAZI=true)"
+elif command -v yazi &>/dev/null; then
+    ok "yazi $(yazi --version 2>/dev/null | head -1) — already installed"
+else
+    info "Installing yazi..."
+    case "$(uname -m)" in
+        x86_64)  YAZI_ARCH="x86_64-unknown-linux-gnu" ;;
+        aarch64) YAZI_ARCH="aarch64-unknown-linux-gnu" ;;
+        *)       YAZI_ARCH="" ;;
+    esac
+    if [ -n "$YAZI_ARCH" ]; then
+        TMP_DIR="$(mktemp -d)"
+        curl -fsSL "https://github.com/sxyazi/yazi/releases/latest/download/yazi-${YAZI_ARCH}.zip" \
+            -o "$TMP_DIR/yazi.zip"
+        unzip -o "$TMP_DIR/yazi.zip" -d "$TMP_DIR" >/dev/null
+        sudo install "$TMP_DIR/yazi-${YAZI_ARCH}/yazi" /usr/local/bin/yazi
+        rm -rf "$TMP_DIR"
+        ok "yazi $(yazi --version 2>/dev/null | head -1) installed"
+    else
+        info "Unsupported architecture for yazi: $(uname -m)"
+    fi
+fi
+
+# ===========================================================================
+# 8. lazygit (terminal git UI — used by four-pane layout)
+# ===========================================================================
+
+step "[8/12] lazygit"
+
+if [ "$SKIP_LAZYGIT" = "true" ]; then
+    info "Skipping (SKIP_LAZYGIT=true)"
+elif command -v lazygit &>/dev/null; then
+    ok "lazygit $(lazygit --version 2>/dev/null | sed 's/.*version=//' | cut -d, -f1) — already installed"
+else
+    info "Installing lazygit..."
+    LAZYGIT_VERSION="$(curl -fsSL 'https://api.github.com/repos/jesseduffield/lazygit/releases/latest' | jq -r '.tag_name' | sed 's/v//')"
+    case "$(uname -m)" in
+        x86_64)  LAZYGIT_ARCH="x86_64" ;;
+        aarch64) LAZYGIT_ARCH="arm64"   ;;
+        *)       LAZYGIT_ARCH="" ;;
+    esac
+    if [ -n "$LAZYGIT_ARCH" ]; then
+        TMP_DIR="$(mktemp -d)"
+        curl -fsSL "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_${LAZYGIT_ARCH}.tar.gz" \
+            -o "$TMP_DIR/lazygit.tar.gz"
+        tar xf "$TMP_DIR/lazygit.tar.gz" -C "$TMP_DIR" lazygit
+        sudo install "$TMP_DIR/lazygit" /usr/local/bin/lazygit
+        rm -rf "$TMP_DIR"
+        ok "lazygit ${LAZYGIT_VERSION} installed"
+    else
+        info "Unsupported architecture for lazygit: $(uname -m)"
+    fi
+fi
+
+# ===========================================================================
+# 9. Oh My Posh
+# ===========================================================================
+
+step "[9/12] Oh My Posh"
 
 if [ "$SKIP_OHMYPOSH" = "true" ]; then
     info "Skipping (SKIP_OHMYPOSH=true)"
@@ -258,10 +325,10 @@ else
 fi
 
 # ===========================================================================
-# 8. tmux Plugin Manager (TPM)
+# 10. tmux Plugin Manager (TPM)
 # ===========================================================================
 
-step "[8/10] tmux Plugin Manager (TPM)"
+step "[10/12] tmux Plugin Manager (TPM)"
 
 TPM_DIR="$HOME/.tmux/plugins/tpm"
 
@@ -279,10 +346,10 @@ else
 fi
 
 # ===========================================================================
-# 9. Tailscale
+# 11. Tailscale
 # ===========================================================================
 
-step "[9/10] Tailscale"
+step "[11/12] Tailscale"
 
 if [ "$SKIP_TAILSCALE" = "true" ]; then
     info "Skipping (SKIP_TAILSCALE=true)"
@@ -295,10 +362,10 @@ else
 fi
 
 # ===========================================================================
-# 10. Config files, shell integration, SSH
+# 12. Config files, shell integration, SSH
 # ===========================================================================
 
-step "[10/10] Config files, completions, and man page"
+step "[12/12] Config files, completions, and man page"
 
 # --- tmux config ---
 

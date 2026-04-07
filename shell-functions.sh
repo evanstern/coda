@@ -16,6 +16,21 @@ PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
 SESSION_PREFIX="${SESSION_PREFIX:-coda-}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 GIT_REMOTE="${GIT_REMOTE:-origin}"
+
+_coda_sanitize_session_name() {
+    printf '%s' "$1" | tr '.' '-'
+}
+
+_coda_detect_default_branch() {
+    local project_dir="$1"
+    local ref
+    ref=$(git -C "$project_dir/.bare" symbolic-ref HEAD 2>/dev/null)
+    if [ -n "$ref" ]; then
+        printf '%s' "${ref#refs/heads/}"
+    else
+        printf '%s' "$DEFAULT_BRANCH"
+    fi
+}
 OPENCODE_BASE_PORT="${OPENCODE_BASE_PORT:-4096}"
 OPENCODE_PORT_RANGE="${OPENCODE_PORT_RANGE:-10}"
 AUTO_ATTACH_TMUX="${AUTO_ATTACH_TMUX:-true}"
@@ -95,7 +110,7 @@ coda() {
 _coda_attach() {
     local name="${1:-$(basename "$PWD")}"
     local dir="${2:-$PWD}"
-    local session="${SESSION_PREFIX}${name}"
+    local session="${SESSION_PREFIX}$(_coda_sanitize_session_name "$name")"
 
     local layout="${CODA_LAYOUT:-$DEFAULT_LAYOUT}"
     local nvim_appname="${CODA_NVIM_APPNAME:-$DEFAULT_NVIM_APPNAME}"
@@ -277,14 +292,17 @@ _coda_project_add() {
         echo "Worktrees:"
         git -C "$project_dir" worktree list 2>/dev/null | sed 's/^/  /'
 
-        if [ ! -d "$project_dir/$DEFAULT_BRANCH" ]; then
+        local branch
+        branch=$(_coda_detect_default_branch "$project_dir")
+
+        if [ ! -d "$project_dir/$branch" ]; then
             git -C "$project_dir" worktree add \
-                "$project_dir/$DEFAULT_BRANCH" "$DEFAULT_BRANCH"
+                "$project_dir/$branch" "$branch"
         fi
 
         echo ""
-        echo "Opening session in $project_dir/$DEFAULT_BRANCH"
-        _coda_attach "$name" "$project_dir/$DEFAULT_BRANCH"
+        echo "Opening session in $project_dir/$branch"
+        _coda_attach "$name" "$project_dir/$branch"
         return $?
     fi
 
@@ -304,21 +322,24 @@ _coda_project_add() {
     git -C "$project_dir" config worktree.useRelativePaths true
     git -C "$project_dir" fetch --all --quiet
 
-    if [ ! -d "$project_dir/$DEFAULT_BRANCH" ]; then
+    local branch
+    branch=$(_coda_detect_default_branch "$project_dir")
+
+    if [ ! -d "$project_dir/$branch" ]; then
         git -C "$project_dir" worktree add \
-            "$project_dir/$DEFAULT_BRANCH" "$DEFAULT_BRANCH"
+            "$project_dir/$branch" "$branch"
     fi
 
     echo ""
     echo "Project ready: $project_dir"
-    echo "Opening session in $project_dir/$DEFAULT_BRANCH"
-    _coda_attach "$name" "$project_dir/$DEFAULT_BRANCH"
+    echo "Opening session in $project_dir/$branch"
+    _coda_attach "$name" "$project_dir/$branch"
 }
 
 # coda project workon <name> [branch]
 _coda_project_workon() {
     local name="${1:-}"
-    local branch="${2:-$DEFAULT_BRANCH}"
+    local branch="${2:-}"
 
     if [ -z "$name" ]; then
         echo "Usage: coda project workon <name> [branch]"
@@ -333,6 +354,10 @@ _coda_project_workon() {
         return 1
     fi
 
+    if [ -z "$branch" ]; then
+        branch=$(_coda_detect_default_branch "$project_dir")
+    fi
+
     local worktree_dir="$project_dir/$branch"
 
     if [ ! -d "$worktree_dir" ]; then
@@ -341,7 +366,8 @@ _coda_project_workon() {
            git -C "$project_dir" show-ref --verify --quiet "refs/remotes/${GIT_REMOTE}/$branch" 2>/dev/null; then
             git -C "$project_dir" worktree add "$worktree_dir" "$branch"
         else
-            git -C "$project_dir" worktree add -b "$branch" "$worktree_dir" "$DEFAULT_BRANCH"
+            git -C "$project_dir" worktree add -b "$branch" "$worktree_dir" \
+                "$(_coda_detect_default_branch "$project_dir")"
         fi
     fi
 
@@ -386,7 +412,7 @@ _coda_feature() {
 # coda feature start <branch> [base] [project]
 _coda_feature_start() {
     local branch="${1:-}"
-    local base="${2:-$DEFAULT_BRANCH}"
+    local base="${2:-}"
     local project_name="${3:-}"
 
     if [ -z "$branch" ]; then
@@ -400,6 +426,10 @@ _coda_feature_start() {
         echo "Not inside a coda project directory."
         echo "cd into a project first, or run: coda project add <url>"
         return 1
+    fi
+
+    if [ -z "$base" ]; then
+        base=$(_coda_detect_default_branch "$project_root")
     fi
 
     if [ -z "$project_name" ]; then
@@ -442,7 +472,7 @@ _coda_feature_done() {
         project_name=$(basename "$project_root")
     fi
 
-    local session="${SESSION_PREFIX}${project_name}--${branch}"
+    local session="${SESSION_PREFIX}$(_coda_sanitize_session_name "$project_name")--${branch}"
     local worktree_dir="$project_root/$branch"
 
     echo "Cleaning up feature: $branch"

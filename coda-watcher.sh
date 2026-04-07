@@ -99,13 +99,13 @@ notify() {
 
     local display_name="${session#"$SESSION_PREFIX"}"
 
-    # Send BEL via tmux + display-message to every attached client.
-    # We use 'tmux send-keys' to inject the bell character rather than
-    # writing directly to the client pty (which requires pty ownership).
+    # Send BEL + display-message to every attached client.
+    # Write the bell character directly to the client pty so it propagates
+    # through mosh to the local terminal without injecting text into the pane.
     local client_tty
     while IFS= read -r client_tty; do
         [ -z "$client_tty" ] && continue
-        tmux send-keys -t "$session" BEL 2>/dev/null || true
+        printf '\a' > "$client_tty" 2>/dev/null || true
         tmux display-message -c "$client_tty" \
             "coda: ${display_name} needs attention" 2>/dev/null || true
     done < <(tmux list-clients -F '#{client_tty}' 2>/dev/null)

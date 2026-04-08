@@ -169,6 +169,7 @@ _coda_feature_args() {
             subcmds=(
                 'start:create a worktree and session for a branch'
                 'done:teardown a worktree and its session'
+                'finish:teardown current feature (agent-safe, backgrounded)'
                 'ls:list worktrees for the current project'
             )
             _describe 'feature subcommand' subcmds
@@ -182,6 +183,10 @@ _coda_feature_args() {
                 done)
                     local branches=($(_coda_worktree_branches))
                     _describe 'worktree branch' branches
+                    ;;
+                finish)
+                    local -a flags=('--force:discard uncommitted changes and tear down')
+                    _describe 'flag' flags
                     ;;
             esac
             ;;

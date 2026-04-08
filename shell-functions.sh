@@ -401,11 +401,12 @@ _coda_project_ls() {
 _coda_feature() {
     local subcmd="${1:-}"
     case "$subcmd" in
-        start) shift; _coda_feature_start "$@" ;;
-        done)  shift; _coda_feature_done "$@" ;;
-        ls)    _coda_feature_ls ;;
-        ""|help) echo "Usage: coda feature <start|done|ls>" ;;
-        *)    echo "Unknown feature subcommand: $subcmd"; echo "Usage: coda feature <start|done|ls>"; return 1 ;;
+        start)  shift; _coda_feature_start "$@" ;;
+        done)   shift; _coda_feature_done "$@" ;;
+        finish) shift; _coda_feature_finish "$@" ;;
+        ls)     _coda_feature_ls ;;
+        ""|help) echo "Usage: coda feature <start|done|finish|ls>" ;;
+        *)    echo "Unknown feature subcommand: $subcmd"; echo "Usage: coda feature <start|done|finish|ls>"; return 1 ;;
     esac
 }
 
@@ -493,6 +494,82 @@ _coda_feature_done() {
     fi
 
     echo "Done."
+}
+
+# coda feature finish [--force]
+_coda_feature_finish() {
+    local force=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --force|-f) force=true; shift ;;
+            *) echo "Usage: coda feature finish [--force]"; return 1 ;;
+        esac
+    done
+
+    local project_root
+    project_root=$(_coda_find_project_root)
+    if [ -z "$project_root" ]; then
+        echo "Not inside a coda project directory."
+        return 1
+    fi
+
+    local project_name
+    project_name=$(basename "$project_root")
+
+    local branch
+    branch=$(git -C "$PWD" rev-parse --abbrev-ref HEAD 2>/dev/null)
+    if [ -z "$branch" ]; then
+        echo "Could not detect current branch."
+        return 1
+    fi
+
+    local default_branch
+    default_branch=$(_coda_detect_default_branch "$project_root")
+    if [ "$branch" = "$default_branch" ]; then
+        echo "You are on $default_branch. Switch to a feature branch first."
+        return 1
+    fi
+
+    if [ "$force" = false ]; then
+        if ! git -C "$PWD" diff --quiet 2>/dev/null || ! git -C "$PWD" diff --cached --quiet 2>/dev/null; then
+            echo "Uncommitted changes detected. Commit or stash before finishing."
+            echo "  git status:"
+            git -C "$PWD" status --short
+            echo ""
+            echo "To discard changes and tear down anyway: coda feature finish --force"
+            return 1
+        fi
+
+        if [ -n "$(git -C "$PWD" ls-files --others --exclude-standard 2>/dev/null)" ]; then
+            echo "Untracked files detected. Commit or remove them before finishing."
+            echo "  Untracked:"
+            git -C "$PWD" ls-files --others --exclude-standard | sed 's/^/    /'
+            echo ""
+            echo "To discard and tear down anyway: coda feature finish --force"
+            return 1
+        fi
+    fi
+
+    local session="${SESSION_PREFIX}$(_coda_sanitize_session_name "$project_name")--${branch}"
+    local worktree_dir="$project_root/$branch"
+
+    echo "Finishing feature: $branch"
+
+    (
+        sleep 1
+        if tmux has-session -t "$session" 2>/dev/null; then
+            tmux kill-session -t "$session"
+        fi
+        if [ -d "$worktree_dir" ]; then
+            git -C "$project_root" worktree remove "$worktree_dir" --force 2>/dev/null
+        fi
+        if git -C "$project_root" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
+            git -C "$project_root" branch -D "$branch" 2>/dev/null
+        fi
+    ) &
+    disown
+
+    echo "  Teardown backgrounded (session, worktree, branch)."
 }
 
 # coda feature ls
@@ -850,6 +927,7 @@ USAGE
 
   coda feature start <branch> [base] [project]   New worktree + session
   coda feature done  <branch> [project]          Teardown worktree + session
+  coda feature finish [--force]                  Teardown current feature (agent-safe)
   coda feature ls                                List worktrees for this project
 
   coda layout <name>                Apply a layout to the current session

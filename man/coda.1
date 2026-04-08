@@ -237,6 +237,21 @@ the branch is deleted regardless of merge status.
 Merge or push your changes before running this command.
 .
 .TP
+.B coda feature finish \fR[\fB\-\-force\fR]
+Agent-safe teardown of the current feature branch.
+Detects the branch and project from the working directory (takes no arguments).
+The teardown (kill session, remove worktree, delete branch) runs in a
+backgrounded subshell so it completes even when called from within the session
+being destroyed.
+.sp
+Refuses to proceed if there are uncommitted or untracked changes.
+Use
+.B \-\-force
+to skip this check and tear down regardless.
+.sp
+Must be run from inside a feature worktree (not the default branch).
+.
+.TP
 .B coda feature ls
 Run
 .B git worktree list

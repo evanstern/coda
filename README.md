@@ -635,6 +635,7 @@ Prefix key: `Ctrl+b`
 | `prefix + H/J/K/L` | Resize panes |
 | `prefix + c` | New window (inherits current path) |
 | `prefix + f` | fzf session switcher (popup) |
+| `prefix + o` | Open a vim popup and submit the saved buffer to the window's OpenCode pane |
 | `prefix + r` | Reload tmux config |
 | `prefix + p` | Paste buffer |
 
@@ -650,6 +651,13 @@ Prefix key: `Ctrl+b`
 
 Copies go to the system clipboard via OSC 52. tmux-continuum saves sessions
 every 15 minutes and restores them on reboot.
+
+In the four-pane layout, `prefix + o` opens a popup editor and pastes the saved
+text into the most relevant OpenCode pane in the current tmux session, then
+presses Enter. It prefers the current window, then falls back within the same
+session using pane title, running command, active window, and matching working
+directory, so it works with the built-in four-pane layout and similar custom
+layouts.
 
 ---
 

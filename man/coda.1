@@ -1,7 +1,7 @@
 .TH CODA 1 "2026-04-09" "coda" "User Commands"
 .
 .SH NAME
-coda \- OpenCode session and project manager
+coda, coda-dev \- OpenCode session and project manager
 .
 .SH SYNOPSIS
 .B coda
@@ -96,10 +96,20 @@ coda \- OpenCode session and project manager
 .
 .SH DESCRIPTION
 .B coda
-is a shell-function toolkit that combines OpenCode AI agents, tmux persistent
+and
+.B coda-dev
+are shell-function entrypoints that combine OpenCode AI agents, tmux persistent
 sessions, and git worktrees into a single workflow.
 Each project lives as a bare git repository with multiple worktrees — one per
 branch — each with its own isolated OpenCode agent running in its own tmux session.
+.PP
+.B coda-dev
+is the preferred rewrite-branch entrypoint when the new workflow must coexist
+with an existing stable
+.B coda
+installation on the same machine.
+It uses the same command surface but defaults to a distinct tmux session prefix
+so the two environments do not collide.
 .PP
 All functions are sourced into the shell from
 .IR shell-functions.sh .

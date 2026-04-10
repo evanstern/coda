@@ -120,36 +120,51 @@ _coda_project_args() {
     local state line
     _arguments -C \
         '1: :->subcmd' \
-        '2: :->arg1' \
-        '3: :->arg2' \
+        '*: :->args' \
         && return 0
 
     case $state in
         subcmd)
             local -a subcmds
             subcmds=(
-                'add:clone a repo as a bare project'
+                'start:start a project (reconnect, clone, or create new)'
                 'workon:open a project session (create worktree if needed)'
                 'ls:list all projects'
             )
             _describe 'project subcommand' subcmds
             ;;
-        arg1)
+        args)
             case $line[1] in
-                add) _urls ;;
+                start)
+                    _arguments \
+                        '--repo[Clone an existing git repository]:url:_urls' \
+                        '--new[Create a new repository]:name:' \
+                        '(-m --message)--message[Description for AGENTS.md]:message:' \
+                        '(-m --message)-m[Description for AGENTS.md]:message:'
+                    ;;
                 workon)
-                    local projects=($(_coda_projects))
-                    _describe 'project' projects
+                    _coda_project_workon_args
                     ;;
             esac
             ;;
-        arg2)
-            case $line[1] in
-                workon)
-                    local branches=($(_coda_project_branches "$line[2]"))
-                    _describe 'branch' branches
-                    ;;
-            esac
+    esac
+}
+
+_coda_project_workon_args() {
+    local state line
+    _arguments -C \
+        '1: :->project' \
+        '2: :->branch' \
+        && return 0
+
+    case $state in
+        project)
+            local projects=($(_coda_projects))
+            _describe 'project' projects
+            ;;
+        branch)
+            local branches=($(_coda_project_branches "$line[1]"))
+            _describe 'branch' branches
             ;;
     esac
 }

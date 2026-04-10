@@ -105,9 +105,10 @@ tmux                       # start your first session
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  ADD A PROJECT (once per repo)                                   │
+  │  START A PROJECT (once per repo)                                  │
   │                                                                   │
-  │  coda project add git@github.com:user/myapp.git                 │
+  │  coda project start --repo git@github.com:user/myapp.git        │
+  │  coda project start --new my-tool -m "CLI for widgets"          │
   │       │                                                           │
   │       └──▶  ~/projects/myapp/                                    │
   │                  ├── .bare/    (all git objects)                  │
@@ -235,24 +236,43 @@ Also available as `prefix + f` inside tmux (popup).
 
 ---
 
-### `coda project add <url> [name]`
+### `coda project start`
 
-Clone a repo using the bare repository pattern and create the initial worktree.
+Unified entry point for starting projects. Three modes:
+
+**Reconnect** — from inside a project directory, connect to the existing
+main/master session:
 
 ```bash
-coda project add git@github.com:user/myapp.git
-coda project add https://github.com/user/myapp.git custom-name
+cd ~/projects/myapp/main
+coda project start
 ```
 
-Creates:
+**Clone** — clone an existing repo using the bare repository pattern:
+
+```bash
+coda project start --repo git@github.com:user/myapp.git
+coda project start --repo https://github.com/user/myapp.git custom-name
 ```
-~/projects/myapp/
+
+**Create new** — create a new private repo on GitHub (`GIT_ORG`, default:
+`evanstern`), push an initial commit, and clone it locally:
+
+```bash
+coda project start --new my-tool
+coda project start --new my-tool -m "CLI for managing widgets"
+```
+
+When `--message` / `-m` is provided, the text is written to `AGENTS.md` in the
+repo root as initial context for AI coding agents. Requires `gh` CLI.
+
+All modes produce the same project layout:
+```
+~/projects/<name>/
   .bare/    (all git objects)
   .git      (pointer: "gitdir: ./.bare")
   main/     (initial worktree, checked out on main)
 ```
-
-If the project already exists, fetches latest and prints current worktrees.
 
 ---
 
@@ -394,7 +414,8 @@ coda <TAB>                     → ls switch serve auth project feature help
 coda feature <TAB>             → start done ls
 coda feature start <TAB>       → [local git branches]
 coda feature done <TAB>        → [branches with active worktrees]
-coda project <TAB>             → add ls
+coda project <TAB>             → start workon ls
+coda project start <TAB>       → --repo --new --message
 coda switch                    → (no completion needed — interactive fzf)
 ```
 
@@ -447,6 +468,7 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `SESSION_PREFIX` | `coda-` | tmux session name prefix |
 | `DEFAULT_BRANCH` | `main` | Default branch for new worktrees |
 | `GIT_REMOTE` | `origin` | Git remote name |
+| `GIT_ORG` | `evanstern` | GitHub org for `coda project start --new` |
 | `EDITOR` / `VISUAL` | `vim` | Editor for OpenCode `/editor` flows |
 | `OPENCODE_BASE_PORT` | `4096` | First port tried by `coda serve` |
 | `OPENCODE_PORT_RANGE` | `10` | Number of ports to scan |

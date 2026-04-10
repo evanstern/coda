@@ -16,6 +16,7 @@ PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
 SESSION_PREFIX="${SESSION_PREFIX:-coda-}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 GIT_REMOTE="${GIT_REMOTE:-origin}"
+GIT_ORG="${GIT_ORG:-evanstern}"
 
 _coda_sanitize_session_name() {
     printf '%s' "$1" | tr '.' '-'
@@ -265,21 +266,150 @@ _coda_auth() {
 _coda_project() {
     local subcmd="${1:-}"
     case "$subcmd" in
+        start)  shift; _coda_project_start "$@" ;;
         add)    shift; _coda_project_add "$@" ;;
         workon) shift; _coda_project_workon "$@" ;;
         ls)     _coda_project_ls ;;
-        ""|help) echo "Usage: coda project <add|workon|ls>" ;;
-        *)    echo "Unknown project subcommand: $subcmd"; echo "Usage: coda project <add|workon|ls>"; return 1 ;;
+        ""|help) echo "Usage: coda project <start|workon|ls>" ;;
+        *)    echo "Unknown project subcommand: $subcmd"; echo "Usage: coda project <start|workon|ls>"; return 1 ;;
     esac
 }
 
-# coda project add <repo-url> [name]
+# coda project start [--repo <url>] [--new <name>] [--message|-m "..."]
+_coda_project_start() {
+    local repo="" new_name="" message=""
+    local positional=()
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --repo)      repo="$2"; shift 2 ;;
+            --repo=*)    repo="${1#--repo=}"; shift ;;
+            --new)       new_name="$2"; shift 2 ;;
+            --new=*)     new_name="${1#--new=}"; shift ;;
+            --message)   message="$2"; shift 2 ;;
+            --message=*) message="${1#--message=}"; shift ;;
+            -m)          message="$2"; shift 2 ;;
+            *)           positional+=("$1"); shift ;;
+        esac
+    done
+
+    if [ -n "$new_name" ]; then
+        _coda_project_start_new "$new_name" "$message"
+    elif [ -n "$repo" ]; then
+        _coda_project_add "$repo" "${positional[0]:-}"
+    else
+        _coda_project_start_reconnect
+    fi
+}
+
+# coda project start (no args) — reconnect to existing main/master session
+_coda_project_start_reconnect() {
+    local project_root
+    project_root=$(_coda_find_project_root)
+    if [ -z "$project_root" ]; then
+        echo "Not inside a coda project directory."
+        echo ""
+        echo "Usage:"
+        echo "  coda project start                           Reconnect (from inside a project)"
+        echo "  coda project start --repo <url> [name]       Clone an existing repo"
+        echo "  coda project start --new <name> [-m \"...\"]   Create a new repo"
+        return 1
+    fi
+
+    local project_name
+    project_name=$(basename "$project_root")
+    local branch
+    branch=$(_coda_detect_default_branch "$project_root")
+    local sanitized
+    sanitized=$(_coda_sanitize_session_name "$project_name")
+
+    # Look for session on default branch (without branch suffix — as created by project start --repo)
+    local session="${SESSION_PREFIX}${sanitized}"
+    if tmux has-session -t "$session" 2>/dev/null; then
+        if [ -n "${TMUX:-}" ]; then
+            tmux switch-client -t "$session"
+        else
+            tmux attach -t "$session"
+        fi
+        return 0
+    fi
+
+    # Also check with branch suffix (e.g., coda-myapp--main)
+    local session_branch="${SESSION_PREFIX}${sanitized}--${branch}"
+    if tmux has-session -t "$session_branch" 2>/dev/null; then
+        if [ -n "${TMUX:-}" ]; then
+            tmux switch-client -t "$session_branch"
+        else
+            tmux attach -t "$session_branch"
+        fi
+        return 0
+    fi
+
+    echo "No active session found for project: $project_name"
+    echo ""
+    echo "Start one with:"
+    echo "  coda project workon $project_name"
+    echo "  coda                                (from within the project)"
+    return 1
+}
+
+# coda project start --new <name> [--message "..."]
+_coda_project_start_new() {
+    local name="$1"
+    local message="$2"
+    local project_dir="$PROJECTS_DIR/$name"
+    local repo_url="git@github.com:${GIT_ORG}/${name}.git"
+    local branch="$DEFAULT_BRANCH"
+
+    if [ -z "$name" ]; then
+        echo "Usage: coda project start --new <repo-name> [--message \"...\"]"
+        return 1
+    fi
+
+    if ! command -v gh &>/dev/null; then
+        echo "GitHub CLI (gh) is required for --new."
+        echo "Install: https://cli.github.com/"
+        return 1
+    fi
+
+    if [ -d "$project_dir" ]; then
+        echo "Directory already exists: $project_dir"
+        return 1
+    fi
+
+    echo "Creating repository: ${GIT_ORG}/${name}"
+    if ! gh repo create "${GIT_ORG}/${name}" --private; then
+        echo "Failed to create repository on GitHub."
+        return 1
+    fi
+
+    # Bootstrap: temp repo → initial commit → push
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    git init "$tmpdir" --quiet -b "$branch"
+
+    echo "# $name" > "$tmpdir/README.md"
+    if [ -n "$message" ]; then
+        printf '# %s\n\n%s\n' "$name" "$message" > "$tmpdir/AGENTS.md"
+    fi
+
+    git -C "$tmpdir" add -A
+    git -C "$tmpdir" commit -m "Initial commit" --quiet
+    git -C "$tmpdir" remote add "$GIT_REMOTE" "$repo_url"
+    git -C "$tmpdir" push -u "$GIT_REMOTE" "$branch" --quiet
+    rm -rf "$tmpdir"
+
+    echo ""
+    _coda_project_add "$repo_url" "$name"
+}
+
+# coda project add <repo-url> [name]  (kept as internal helper; use 'coda project start --repo')
 _coda_project_add() {
     local repo="${1:-}"
     local name="${2:-$(basename "${repo%.git}")}"
 
     if [ -z "$repo" ]; then
-        echo "Usage: coda project add <repo-url> [name]"
+        echo "Usage: coda project start --repo <repo-url> [name]"
         return 1
     fi
 
@@ -350,7 +480,7 @@ _coda_project_workon() {
 
     if [ ! -d "$project_dir/.bare" ]; then
         echo "Not a coda project: $name"
-        echo "Add it first: coda project add <repo-url> $name"
+        echo "Add it first: coda project start --repo <repo-url>"
         return 1
     fi
 
@@ -391,7 +521,7 @@ _coda_project_ls() {
 
     if [ "$found" -eq 0 ]; then
         echo "No projects found in $PROJECTS_DIR"
-        echo "Add one with: coda project add <repo-url>"
+        echo "Add one with: coda project start --repo <repo-url>"
     fi
 }
 
@@ -425,7 +555,7 @@ _coda_feature_start() {
     project_root=$(_coda_find_project_root)
     if [ -z "$project_root" ]; then
         echo "Not inside a coda project directory."
-        echo "cd into a project first, or run: coda project add <url>"
+        echo "cd into a project first, or run: coda project start --repo <url>"
         return 1
     fi
 
@@ -921,9 +1051,11 @@ USAGE
   coda serve [port]           Start OpenCode in headless server mode
   coda auth                   Wire Claude Code credentials to OpenCode
 
-  coda project add <url> [name]        Clone a repo as a bare project
-  coda project workon <name> [branch]  Open a project session (create worktree if needed)
-  coda project ls                      List projects in PROJECTS_DIR
+  coda project start                              Reconnect to main/master session
+  coda project start --repo <url> [name]          Clone a repo as a bare project
+  coda project start --new <name> [-m "..."]      Create a new repo on GitHub
+  coda project workon <name> [branch]             Open a project session
+  coda project ls                                 List projects in PROJECTS_DIR
 
   coda feature start <branch> [base] [project]   New worktree + session
   coda feature done  <branch> [project]          Teardown worktree + session
@@ -950,7 +1082,8 @@ GLOBAL FLAGS
   --layout <name>             Override the tmux layout for this session
 
 EXAMPLES
-  coda project add git@github.com:user/myapp.git
+  coda project start --repo git@github.com:user/myapp.git
+  coda project start --new my-tool -m "CLI for managing widgets"
   cd ~/projects/myapp/main
   coda feature start auth
   coda --profile experimental feature start auth

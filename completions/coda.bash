@@ -71,11 +71,6 @@ _coda_complete() {
     #   words[2] = sub-subcommand or first arg
     #   words[3] = second arg ...
 
-    if [[ "$cur" == --* ]]; then
-        COMPREPLY=($(compgen -W "--profile --layout" -- "$cur"))
-        return 0
-    fi
-
     if [[ "$prev" == "--profile" ]]; then
         local profiles
         profiles=$(_coda_profiles)
@@ -90,6 +85,26 @@ _coda_complete() {
         return 0
     fi
 
+    if [[ "${words[1]}" == "project" ]] && [[ "${words[2]}" == "start" ]] && [[ "$cword" -ge 3 ]]; then
+        case "$prev" in
+            --repo|--new|--message|-m)
+                COMPREPLY=()
+                return 0
+                ;;
+            *)
+                if [[ "$cur" == -* ]]; then
+                    COMPREPLY=($(compgen -W "--repo --new --message -m" -- "$cur"))
+                fi
+                return 0
+                ;;
+        esac
+    fi
+
+    if [[ "$cur" == --* ]]; then
+        COMPREPLY=($(compgen -W "--profile --layout" -- "$cur"))
+        return 0
+    fi
+
     case "$cword" in
         1)
             local sessions
@@ -99,7 +114,7 @@ _coda_complete() {
         2)
             case "${words[1]}" in
                 project)
-                    COMPREPLY=($(compgen -W "add workon ls" -- "$cur"))
+                    COMPREPLY=($(compgen -W "start workon ls" -- "$cur"))
                     ;;
                 feature)
                     COMPREPLY=($(compgen -W "start done finish ls" -- "$cur"))
@@ -116,13 +131,11 @@ _coda_complete() {
                     COMPREPLY=($(compgen -W "start stop status" -- "$cur"))
                     ;;
                 attach)
-                    # Suggest existing sessions to attach to
                     local sessions
                     sessions=$(_coda_sessions)
                     COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
                     ;;
                 serve)
-                    # Port numbers in the configured range
                     local base="${OPENCODE_BASE_PORT:-4096}"
                     local ports=""
                     for i in 0 1 2 3 4 5 6 7 8 9; do
@@ -174,9 +187,6 @@ _coda_complete() {
                     ;;
                 project)
                     case "${words[2]}" in
-                        add)
-                            COMPREPLY=($(compgen -d -- "$cur"))
-                            ;;
                         workon)
                             local projects
                             projects=$(_coda_projects)
@@ -218,7 +228,6 @@ _coda_complete() {
                 feature)
                     case "${words[2]}" in
                         start)
-                            # project name argument (3rd positional)
                             local projects
                             projects=$(_coda_projects)
                             COMPREPLY=($(compgen -W "$projects" -- "$cur"))

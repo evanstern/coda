@@ -22,9 +22,22 @@ coda \- OpenCode session and project manager
 .br
 .B coda
 .B project
-.B add
-.I repo-url
+.B start
+.br
+.B coda
+.B project
+.B start
+.B \-\-repo
+.I url
 .RI [ name ]
+.br
+.B coda
+.B project
+.B start
+.B \-\-new
+.I repo-name
+.RB [ \-\-message | \-m
+.IR description ]
 .br
 .B coda
 .B project
@@ -173,12 +186,21 @@ Re-run if Claude auth expires.
 .SS Project management
 .
 .TP
-.B coda project add \fIrepo-url\fR [\fIname\fR]
+.B coda project start
+When run from inside a coda project directory (any worktree or the project
+root), connects to an existing tmux session on the project's default branch
+.RB ( main " or " master ).
+If no active session is found, prints an error.
+.
+.TP
+.B coda project start \-\-repo \fIurl\fR [\fIname\fR]
 Clone
-.I repo-url
+.I url
 as a bare repository and create the initial
 .B DEFAULT_BRANCH
 worktree.
+.I name
+defaults to the repository basename.
 The project is stored under
 .IR PROJECTS_DIR / name /
 with the following layout:
@@ -192,6 +214,24 @@ PROJECTS_DIR/name/
 .RE
 If the project already exists, fetches the latest changes and shows current
 worktrees instead.
+.
+.TP
+.B coda project start \-\-new \fIrepo-name\fR [\fB\-\-message\fR|\fB\-m\fR \fIdescription\fR]
+Create a new private repository under the
+.B GIT_ORG
+GitHub organization (default:
+.IR evanstern ),
+push an initial commit, and clone it locally as a bare project.
+.sp
+If
+.B \-\-message
+is provided, the text is written to an
+.B AGENTS.md
+file in the repository root, intended as initial context for AI coding agents.
+.sp
+Requires the GitHub CLI
+.RB ( gh )
+to be installed and authenticated.
 .
 .TP
 .B coda project ls
@@ -408,6 +448,7 @@ PROJECTS_DIR	~/projects	Root dir for repos
 SESSION_PREFIX	coda-	tmux session name prefix
 DEFAULT_BRANCH	main	Branch for new worktrees
 GIT_REMOTE	origin	Git remote name
+GIT_ORG	evanstern	GitHub org for \fB\-\-new\fR repos
 OPENCODE_BASE_PORT	4096	First port for \fBcoda serve\fR
 OPENCODE_PORT_RANGE	10	Ports to scan
 DEFAULT_LAYOUT	default	Default tmux layout
@@ -430,11 +471,16 @@ claude auth login
 coda auth
 .EE
 .
-.SS Add a project and start working
+.SS Clone a project and start working
 .EX
-coda project add git@github.com:user/myapp.git
+coda project start --repo git@github.com:user/myapp.git
 cd ~/projects/myapp/main
 coda
+.EE
+.
+.SS Create a new project from scratch
+.EX
+coda project start --new my-tool -m "CLI for managing widgets"
 .EE
 .
 .SS Feature branch workflow

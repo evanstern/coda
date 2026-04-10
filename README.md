@@ -288,6 +288,29 @@ coda project ls
 
 ---
 
+### `coda project close [--delete]`
+
+Close the tmux sessions for the current project. Must be run from inside a coda
+project directory.
+
+```bash
+cd ~/projects/myapp/main
+
+coda project close
+# closes coda-myapp and any coda-myapp--* sessions
+# keeps ~/projects/myapp/ on disk
+
+coda project close --delete
+# closes the same sessions
+# also removes ~/projects/myapp/
+```
+
+By default, `close` only shuts down the project's tmux sessions. Pass
+`--delete` to also remove the project folder and all worktrees under it.
+Teardown is backgrounded, so the sessions or folders may take a moment to disappear.
+
+---
+
 ### `coda feature start <branch> [base] [project]`
 
 Create a git worktree on a new branch and open an OpenCode session inside it.
@@ -414,7 +437,8 @@ coda <TAB>                     → ls switch serve auth project feature help
 coda feature <TAB>             → start done ls
 coda feature start <TAB>       → [local git branches]
 coda feature done <TAB>        → [branches with active worktrees]
-coda project <TAB>             → start workon ls
+coda project <TAB>             → start workon close ls
+coda project close <TAB>       → --delete
 coda project start <TAB>       → --repo --new --message
 coda switch                    → (no completion needed — interactive fzf)
 ```

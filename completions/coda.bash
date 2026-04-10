@@ -114,7 +114,7 @@ _coda_complete() {
         2)
             case "${words[1]}" in
                 project)
-                    COMPREPLY=($(compgen -W "start workon ls" -- "$cur"))
+                    COMPREPLY=($(compgen -W "start workon close ls" -- "$cur"))
                     ;;
                 feature)
                     COMPREPLY=($(compgen -W "start done finish ls" -- "$cur"))
@@ -187,6 +187,9 @@ _coda_complete() {
                     ;;
                 project)
                     case "${words[2]}" in
+                        close)
+                            COMPREPLY=($(compgen -W "--delete" -- "$cur"))
+                            ;;
                         workon)
                             local projects
                             projects=$(_coda_projects)

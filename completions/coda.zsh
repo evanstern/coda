@@ -129,6 +129,7 @@ _coda_project_args() {
             subcmds=(
                 'start:start a project (reconnect, clone, or create new)'
                 'workon:open a project session (create worktree if needed)'
+                'close:close project sessions, optionally delete folders'
                 'ls:list all projects'
             )
             _describe 'project subcommand' subcmds
@@ -141,6 +142,10 @@ _coda_project_args() {
                         '--new[Create a new repository]:name:' \
                         '(-m --message)--message[Description for AGENTS.md]:message:' \
                         '(-m --message)-m[Description for AGENTS.md]:message:'
+                    ;;
+                close)
+                    _arguments \
+                        '--delete[Also remove the project folder after closing sessions]'
                     ;;
                 workon)
                     _coda_project_workon_args

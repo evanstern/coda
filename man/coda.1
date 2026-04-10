@@ -1,4 +1,4 @@
-.TH CODA 1 "2026-04-05" "coda" "User Commands"
+.TH CODA 1 "2026-04-09" "coda" "User Commands"
 .
 .SH NAME
 coda \- OpenCode session and project manager
@@ -38,6 +38,11 @@ coda \- OpenCode session and project manager
 .I repo-name
 .RB [ \-\-message | \-m
 .IR description ]
+.br
+.B coda
+.B project
+.B close
+.RB [ \-\-delete ]
 .br
 .B coda
 .B project
@@ -232,6 +237,22 @@ file in the repository root, intended as initial context for AI coding agents.
 Requires the GitHub CLI
 .RB ( gh )
 to be installed and authenticated.
+.
+.TP
+.B coda project close \fR[\fB\-\-delete\fR]
+Close all active tmux sessions associated with the current project.
+Must be run from inside a coda project directory (any worktree or the project
+root).
+.sp
+By default, only tmux sessions are closed.
+Use
+.B \-\-delete
+to also remove the entire project directory under
+.BR PROJECTS_DIR ,
+including the bare repository and all worktrees.
+.sp
+Teardown runs in a backgrounded subshell, so sessions or folders may take a
+moment to disappear after the command returns.
 .
 .TP
 .B coda project ls

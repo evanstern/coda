@@ -64,6 +64,7 @@ CODA_LAYOUTS_DIR="${CODA_LAYOUTS_DIR:-$HOME/.config/coda/layouts}"
 coda() {
     local _coda_profile="" _coda_layout=""
     local args=()
+    local status=0
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -81,27 +82,29 @@ coda() {
     local subcmd="${args[0]:-}"
 
     case "$subcmd" in
-        ls)               _coda_ls ;;
-        switch)           _coda_switch ;;
+        ls)               _coda_ls; status=$? ;;
+        switch)           _coda_switch; status=$? ;;
         attach)           if [ "${#args[@]}" -gt 1 ]; then
                               _coda_attach "${args[1]#"$SESSION_PREFIX"}" "${args[@]:2}"
-                          else
+                           else
                               _coda_attach
-                          fi
+                           fi
+                          status=$?
                           ;;
-        auth)             _coda_auth ;;
-        serve)            _coda_serve "${args[@]:1}" ;;
-        project)          _coda_project "${args[@]:1}" ;;
-        feature)          _coda_feature "${args[@]:1}" ;;
-        layout)           _coda_layout_cmd "${args[@]:1}" ;;
-        profile)          _coda_profile_cmd "${args[@]:1}" ;;
-        watch)            _coda_watch "${args[@]:1}" ;;
-        help|--help|-h)   _coda_help ;;
-        "")               _coda_attach ;;
-        *)                _coda_attach "${args[0]#"$SESSION_PREFIX"}" "${args[@]:1}" ;;
+        auth)             _coda_auth; status=$? ;;
+        serve)            _coda_serve "${args[@]:1}"; status=$? ;;
+        project)          _coda_project "${args[@]:1}"; status=$? ;;
+        feature)          _coda_feature "${args[@]:1}"; status=$? ;;
+        layout)           _coda_layout_cmd "${args[@]:1}"; status=$? ;;
+        profile)          _coda_profile_cmd "${args[@]:1}"; status=$? ;;
+        watch)            _coda_watch "${args[@]:1}"; status=$? ;;
+        help|--help|-h)   _coda_help; status=$? ;;
+        "")               _coda_attach; status=$? ;;
+        *)                _coda_attach "${args[0]#"$SESSION_PREFIX"}" "${args[@]:1}"; status=$? ;;
     esac
 
     unset CODA_PROFILE CODA_LAYOUT
+    return "$status"
 }
 
 # ===========================================================================
@@ -269,9 +272,10 @@ _coda_project() {
         start)  shift; _coda_project_start "$@" ;;
         add)    shift; _coda_project_add "$@" ;;
         workon) shift; _coda_project_workon "$@" ;;
+        close)  shift; _coda_project_close "$@" ;;
         ls)     _coda_project_ls ;;
-        ""|help) echo "Usage: coda project <start|workon|ls>" ;;
-        *)    echo "Unknown project subcommand: $subcmd"; echo "Usage: coda project <start|workon|ls>"; return 1 ;;
+        ""|help) echo "Usage: coda project <start|workon|close|ls>" ;;
+        *)    echo "Unknown project subcommand: $subcmd"; echo "Usage: coda project <start|workon|close|ls>"; return 1 ;;
     esac
 }
 
@@ -523,6 +527,95 @@ _coda_project_ls() {
         echo "No projects found in $PROJECTS_DIR"
         echo "Add one with: coda project start --repo <repo-url>"
     fi
+}
+
+_coda_project_close() {
+    local delete=false
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --delete) delete=true; shift ;;
+            *) echo "Usage: coda project close [--delete]"; return 1 ;;
+        esac
+    done
+
+    local project_root
+    project_root=$(_coda_find_project_root)
+    if [ -z "$project_root" ]; then
+        echo "Not inside a coda project directory."
+        return 1
+    fi
+
+    local requested_project_root="$project_root"
+
+    local physical_project_root
+    physical_project_root=$(cd "$project_root" 2>/dev/null && pwd -P)
+    if [ -z "$physical_project_root" ]; then
+        echo "Could not resolve project path: $project_root"
+        return 1
+    fi
+    project_root="$physical_project_root"
+
+    local physical_projects_dir=""
+    if [ "$delete" = true ]; then
+        physical_projects_dir=$(cd "$PROJECTS_DIR" 2>/dev/null && pwd -P)
+        if [ -z "$physical_projects_dir" ]; then
+            echo "Could not resolve PROJECTS_DIR: $PROJECTS_DIR"
+            return 1
+        fi
+
+        case "$project_root" in
+            "$physical_projects_dir"|"$physical_projects_dir"/*) ;;
+            *)
+                echo "Refusing to delete project outside PROJECTS_DIR: $project_root"
+                return 1
+                ;;
+        esac
+    fi
+
+    local project_name
+    project_name=$(basename "$project_root")
+
+    local sanitized
+    sanitized=$(_coda_sanitize_session_name "$project_name")
+
+    local -a sessions=()
+    local session_name
+    while IFS= read -r session_name; do
+        case "$session_name" in
+            "${SESSION_PREFIX}${sanitized}"|"${SESSION_PREFIX}${sanitized}"--*)
+                sessions+=("$session_name")
+                ;;
+        esac
+    done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)
+
+    if [ "$delete" = true ]; then
+        echo "Closing project: $project_name"
+        echo "  Teardown backgrounded (sessions + project folder)."
+    else
+        echo "Closing project: $project_name"
+        echo "  Teardown backgrounded (sessions only)."
+    fi
+
+    (
+        sleep 1
+
+        local session
+        for session in "${sessions[@]}"; do
+            if tmux has-session -t "$session" 2>/dev/null; then
+                tmux kill-session -t "$session"
+            fi
+        done
+
+        if [ "$delete" = true ] && [ -d "$project_root" ]; then
+            rm -rf "$project_root"
+            if [ "$requested_project_root" != "$project_root" ] && [ -L "$requested_project_root" ]; then
+                rm -f "$requested_project_root"
+            fi
+        fi
+    ) &
+    disown 2>/dev/null || true
+    return 0
 }
 
 # ===========================================================================
@@ -1055,6 +1148,7 @@ USAGE
   coda project start --repo <url> [name]          Clone a repo as a bare project
   coda project start --new <name> [-m "..."]      Create a new repo on GitHub
   coda project workon <name> [branch]             Open a project session
+  coda project close [--delete]                   Close project sessions, optionally delete folders
   coda project ls                                 List projects in PROJECTS_DIR
 
   coda feature start <branch> [base] [project]   New worktree + session
@@ -1163,11 +1257,7 @@ _coda_list_profiles() {
 _coda_find_project_root() {
     local dir="$PWD"
     while [ "$dir" != "/" ]; do
-        if [ -f "$dir/.git" ] && grep -q "gitdir: ./.bare" "$dir/.git" 2>/dev/null; then
-            echo "$dir"
-            return
-        fi
-        if [ -d "$dir/.bare" ]; then
+        if [ -d "$dir/.bare" ] && [ -f "$dir/.git" ] && grep -q "gitdir: ./.bare" "$dir/.git" 2>/dev/null; then
             echo "$dir"
             return
         fi

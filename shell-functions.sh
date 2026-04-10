@@ -556,6 +556,23 @@ _coda_project_close() {
     fi
     project_root="$physical_project_root"
 
+    local physical_projects_dir=""
+    if [ "$delete" = true ]; then
+        physical_projects_dir=$(cd "$PROJECTS_DIR" 2>/dev/null && pwd -P)
+        if [ -z "$physical_projects_dir" ]; then
+            echo "Could not resolve PROJECTS_DIR: $PROJECTS_DIR"
+            return 1
+        fi
+
+        case "$project_root" in
+            "$physical_projects_dir"|"$physical_projects_dir"/*) ;;
+            *)
+                echo "Refusing to delete project outside PROJECTS_DIR: $project_root"
+                return 1
+                ;;
+        esac
+    fi
+
     local project_name
     project_name=$(basename "$project_root")
 
@@ -597,7 +614,8 @@ _coda_project_close() {
             fi
         fi
     ) &
-    disown
+    disown 2>/dev/null || true
+    return 0
 }
 
 # ===========================================================================

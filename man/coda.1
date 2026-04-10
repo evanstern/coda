@@ -222,17 +222,15 @@ worktrees instead.
 .
 .TP
 .B coda project start \-\-new \fIrepo-name\fR [\fB\-\-message\fR|\fB\-m\fR \fIdescription\fR]
-Create a new private repository under the
-.B GIT_ORG
-GitHub organization (default:
-.IR evanstern ),
-push an initial commit, and clone it locally as a bare project.
+Create a new private repository under
+.IR evanstern ,
+bootstrap it from a local bare coda project, and push the initial commit.
 .sp
 If
 .B \-\-message
 is provided, the text is written to an
 .B AGENTS.md
-file in the repository root, intended as initial context for AI coding agents.
+file in the repository root verbatim, intended as initial context for AI coding agents.
 .sp
 Requires the GitHub CLI
 .RB ( gh )
@@ -469,7 +467,6 @@ PROJECTS_DIR	~/projects	Root dir for repos
 SESSION_PREFIX	coda-	tmux session name prefix
 DEFAULT_BRANCH	main	Branch for new worktrees
 GIT_REMOTE	origin	Git remote name
-GIT_ORG	evanstern	GitHub org for \fB\-\-new\fR repos
 OPENCODE_BASE_PORT	4096	First port for \fBcoda serve\fR
 OPENCODE_PORT_RANGE	10	Ports to scan
 DEFAULT_LAYOUT	default	Default tmux layout

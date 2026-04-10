@@ -282,16 +282,17 @@ coda project start --repo git@github.com:user/myapp.git
 coda project start --repo https://github.com/user/myapp.git custom-name
 ```
 
-**Create new** — create a new private repo on GitHub (`GIT_ORG`, default:
-`evanstern`), push an initial commit, and clone it locally:
+**Create new** — create a new private repo on GitHub under `evanstern`,
+bootstrap it from a local bare coda project, and push the initial commit:
 
 ```bash
 coda project start --new my-tool
 coda project start --new my-tool -m "CLI for managing widgets"
 ```
 
-When `--message` / `-m` is provided, the text is written to `AGENTS.md` in the
-repo root as initial context for AI coding agents. Requires `gh` CLI.
+When `--message` / `-m` is provided, that message is written verbatim to
+`AGENTS.md` in the repo root as initial context for AI coding agents. Requires
+`gh` CLI.
 
 All modes produce the same project layout:
 ```
@@ -605,7 +606,6 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `SESSION_PREFIX` | `coda-` | tmux session name prefix |
 | `DEFAULT_BRANCH` | `main` | Default branch for new worktrees |
 | `GIT_REMOTE` | `origin` | Git remote name |
-| `GIT_ORG` | `evanstern` | GitHub org for `coda project start --new` |
 | `EDITOR` / `VISUAL` | `vim` | Editor for OpenCode `/editor` flows |
 | `OPENCODE_BASE_PORT` | `4096` | First port tried by `coda serve` |
 | `OPENCODE_PORT_RANGE` | `10` | Number of ports to scan |

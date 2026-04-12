@@ -75,6 +75,7 @@ _coda() {
                 'layout:manage and apply tmux layouts'
                 'profile:manage config profiles'
                 'watch:monitor sessions for attention signals'
+                'provider:manage provider status'
                 'help:show usage'
             )
             # Add existing sessions as completions
@@ -104,6 +105,9 @@ _coda() {
                     ;;
                 watch)
                     _coda_watch_args
+                    ;;
+                provider)
+                    _coda_provider_args
                     ;;
                 serve)
                     local base="${OPENCODE_BASE_PORT:-4096}"
@@ -306,6 +310,23 @@ _coda_watch_args() {
                 'status:check if watcher is running'
             )
             _describe 'watch subcommand' subcmds
+            ;;
+    esac
+}
+
+_coda_provider_args() {
+    local state line
+    _arguments -C \
+        '1: :->subcmd' \
+        && return 0
+
+    case $state in
+        subcmd)
+            local -a subcmds
+            subcmds=(
+                'status:show provider status'
+            )
+            _describe 'provider subcommand' subcmds
             ;;
     esac
 }

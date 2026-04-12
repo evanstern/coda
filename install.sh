@@ -546,14 +546,19 @@ if [ "$SKIP_TAILSCALE" != "true" ] && command -v tailscale &>/dev/null; then
     fi
 fi
 
-echo "  Sign in to Claude:"
-echo "       claude auth login"
-echo ""
 echo "  Reload your shell:"
 echo "       source ${SHELL_RC:-~/.bashrc}"
 echo ""
-echo "  Enable Claude auth in OpenCode:"
+echo "  Provider-aware OpenCode setup:"
+echo "       # Claude path"
+echo "       claude auth login"
 echo "       coda auth"
+echo ""
+echo "       # CLIProxyAPI path"
+echo "       # edit .env: CODA_PROVIDER_MODE=cliproxyapi"
+echo "       # edit .env: CLIPROXYAPI_BASE_URL=http://localhost:8317/v1"
+echo "       coda auth"
+echo "       coda provider status"
 echo ""
 echo "  Start a tmux session:"
 echo "       tmux"

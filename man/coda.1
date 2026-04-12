@@ -1,4 +1,4 @@
-.TH CODA 1 "2026-04-09" "coda" "User Commands"
+.TH CODA 1 "2026-04-12" "coda" "User Commands"
 .
 .SH NAME
 coda \- OpenCode session and project manager
@@ -19,6 +19,10 @@ coda \- OpenCode session and project manager
 .br
 .B coda
 .B auth
+.br
+.B coda
+.B provider
+.B status
 .br
 .B coda
 .B project
@@ -178,15 +182,35 @@ or submit tasks programmatically via the OpenCode HTTP API.
 .
 .TP
 .B coda auth
-Install the
+Wire the active provider into OpenCode.
+By default this uses
+.B CODA_PROVIDER_MODE=claude-auth
+and installs the
 .B opencode-claude-auth
-plugin globally, which lets OpenCode reuse the OAuth credentials written by
-.BR "claude auth login"
-to
-.IR ~/.claude/.credentials.json .
-Run once after
+plugin so OpenCode can reuse the OAuth credentials written by
 .BR "claude auth login" .
-Re-run if Claude auth expires.
+.sp
+If
+.B CODA_PROVIDER_MODE=cliproxyapi
+, the command writes or updates a managed CLIProxyAPI provider block in the
+resolved OpenCode config file instead.
+If
+.B CLIPROXYAPI_API_KEY
+is set, it is also written into that managed provider block for proxy auth.
+CLIProxyAPI itself remains an external service.
+.
+.SS Provider diagnostics
+.
+.TP
+.B coda provider status
+Show diagnostics for the active provider mode.
+In
+.B cliproxyapi
+mode this reports the effective OpenCode config path, whether the managed
+provider block is present, whether optional proxy auth is configured, and
+probes the configured base URL, health URL, and models endpoint.
+Missing config, unauthorized models access, and probe-only success are reported
+separately so the output does not imply end-to-end runtime proof.
 .
 .SS Project management
 .
@@ -469,6 +493,11 @@ DEFAULT_BRANCH	main	Branch for new worktrees
 GIT_REMOTE	origin	Git remote name
 OPENCODE_BASE_PORT	4096	First port for \fBcoda serve\fR
 OPENCODE_PORT_RANGE	10	Ports to scan
+CODA_PROVIDER_MODE	claude-auth	Provider mode for \fBcoda auth\fR
+CLIPROXYAPI_BASE_URL	http://localhost:8317/v1	CLIProxyAPI base URL for the managed provider
+CLIPROXYAPI_API_KEY	empty	Optional proxy API key for cliproxy model probes and managed provider auth
+CLIPROXYAPI_HEALTH_URL	empty	Optional health endpoint for \fBcoda provider status\fR; skipped when unset
+CODA_OPENCODE_CONFIG_PATH	empty	Optional OpenCode config override; also exported as \fBOPENCODE_CONFIG\fR when set
 DEFAULT_LAYOUT	default	Default tmux layout
 CODA_LAYOUTS_DIR	~/.config/coda/layouts	User layout directory
 CODA_PROFILES_DIR	~/.config/coda/profiles	User profile directory
@@ -485,8 +514,18 @@ DEFAULT_TMUX_SESSION	default	Session name for auto-attach
 .EX
 \&./install.sh
 sudo tailscale up
+source ~/.bashrc
+
+# Claude path
 claude auth login
 coda auth
+
+# CLIProxyAPI path
+# edit .env: CODA_PROVIDER_MODE=cliproxyapi
+# edit .env: CLIPROXYAPI_BASE_URL=http://localhost:8317/v1
+# edit .env: CLIPROXYAPI_API_KEY=...   (optional, if your proxy requires auth)
+coda auth
+coda provider status
 .EE
 .
 .SS Clone a project and start working

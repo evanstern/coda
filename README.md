@@ -79,12 +79,33 @@ SKIP_LAZYGIT=true   ./install.sh
 
 ### After install
 
+Reload your shell first, then choose one provider path.
+
 ```bash
 sudo tailscale up          # connect to your Tailscale network
 source ~/.bashrc           # pick up coda + completions
-claude auth login          # one-time OAuth flow
-coda auth                  # wire OpenCode to use those credentials
 tmux                       # start your first session
+```
+
+#### Claude path
+
+```bash
+claude auth login          # one-time OAuth flow
+coda auth                  # install Claude plugin + verify
+```
+
+#### CLIProxyAPI path
+
+Run CLIProxyAPI separately, then point Coda at it:
+
+```bash
+# in ~/coda/.env
+CODA_PROVIDER_MODE="cliproxyapi"
+CLIPROXYAPI_BASE_URL="http://localhost:8317/v1"
+CLIPROXYAPI_API_KEY=""      # optional; set if your proxy requires auth
+
+coda auth                  # write/update OpenCode provider config
+coda provider status       # probe config/auth readiness (not runtime proof)
 ```
 
 ---
@@ -98,10 +119,12 @@ tmux                       # start your first session
   │  ./install.sh                                                     │
   │       │                                                           │
   │       ├──▶  sudo tailscale up                                    │
-  │       ├──▶  claude auth login                                    │
-  │       └──▶  coda auth                                            │
-  │                    │                                              │
-  │                    └──▶  ready ✓                                 │
+  │       ├──▶  source ~/.bashrc                                     │
+  │       ├──▶  Claude path: claude auth login -> coda auth         │
+  │       └──▶  CLIProxyAPI path: edit .env -> coda auth ->         │
+  │                             coda provider status                 │
+  │                                    │                              │
+  │                                    └──▶  ready ✓                 │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
@@ -443,7 +466,10 @@ curl -X POST http://localhost:4096/session/$SESSION_ID/prompt_async \
 
 ### `coda auth`
 
-One-time setup to wire Claude Code credentials to OpenCode.
+One-time setup to wire the active provider into OpenCode. The behavior depends
+on `CODA_PROVIDER_MODE`.
+
+**Claude path** (`CODA_PROVIDER_MODE=claude-auth`, the default):
 
 ```bash
 claude auth login   # complete OAuth in browser
@@ -454,6 +480,39 @@ opencode models anthropic
 ```
 
 If Claude auth expires, re-run `claude auth login` then `coda auth`.
+
+**CLIProxyAPI path** (`CODA_PROVIDER_MODE=cliproxyapi`):
+
+```bash
+# in ~/coda/.env
+CODA_PROVIDER_MODE="cliproxyapi"
+CLIPROXYAPI_BASE_URL="http://localhost:8317/v1"
+CLIPROXYAPI_API_KEY=""      # optional; set if your proxy requires auth
+
+coda auth             # writes/updates ~/.config/opencode/opencode.json
+coda provider status  # probes config/auth readiness; not end-to-end runtime proof
+```
+
+CLIProxyAPI stays external to this repo. `coda auth` manages the OpenCode
+provider config and includes proxy auth when `CLIPROXYAPI_API_KEY` is set; it
+does not start or stop the proxy.
+
+---
+
+### `coda provider status`
+
+Show provider diagnostics for the current mode.
+
+```bash
+coda provider status
+```
+
+In `cliproxyapi` mode this reports the active mode, effective OpenCode config
+path, whether the managed `cliproxyapi` provider block is present, whether
+optional proxy auth is configured, and probes the base URL, health endpoint,
+and models endpoint. Missing config, unauthorized models access, and probe-only
+success are reported separately so the output does not imply end-to-end runtime
+proof.
 
 ---
 
@@ -536,7 +595,7 @@ Installed automatically by `install.sh` for both bash and zsh.
 
 ```
 coda <TAB>                     → attach ls switch serve auth project feature
-                                 layout profile watch help [active sessions]
+                                 layout profile watch provider help [active sessions]
 coda attach <TAB>              → [active sessions]
 coda feature <TAB>             → start done finish ls
 coda feature start <TAB>       → [local git branches]
@@ -551,6 +610,7 @@ coda layout apply <TAB>        → [available layouts]
 coda profile <TAB>             → ls create show
 coda profile show <TAB>        → [available profiles]
 coda watch <TAB>               → start stop status
+coda provider <TAB>            → status
 coda serve <TAB>               → [port numbers]
 coda switch                    → (no completion needed — interactive fzf)
 coda --profile <TAB>           → [available profiles]
@@ -610,6 +670,11 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `OPENCODE_BASE_PORT` | `4096` | First port tried by `coda serve` |
 | `OPENCODE_PORT_RANGE` | `10` | Number of ports to scan |
 | `OPENCODE_HEADLESS_PERMISSION` | `{"*":"allow"}` | Permission policy for `coda serve` |
+| `CODA_PROVIDER_MODE` | `claude-auth` | Provider mode for `coda auth`: `claude-auth` or `cliproxyapi` |
+| `CLIPROXYAPI_BASE_URL` | `http://localhost:8317/v1` | OpenAI-compatible base URL written into the managed CLIProxyAPI provider block |
+| `CLIPROXYAPI_API_KEY` | empty | Optional proxy API key used for cliproxy model discovery/status probes and written into the managed provider block when set |
+| `CLIPROXYAPI_HEALTH_URL` | empty | Optional health endpoint used by `coda provider status`; skipped when unset |
+| `CODA_OPENCODE_CONFIG_PATH` | empty | Optional override for the OpenCode config path; if set, Coda also exports `OPENCODE_CONFIG` |
 | `NODE_MAJOR_VERSION` | `20` | Node.js major version for install |
 | `PACKAGE_MANAGER` | `npm` | Package manager preference (npm, pnpm, or yarn) |
 | `DEFAULT_LAYOUT` | `four-pane` | Default tmux layout when creating sessions |

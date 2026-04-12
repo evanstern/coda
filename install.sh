@@ -107,7 +107,7 @@ echo ""
 # 1. System packages
 # ===========================================================================
 
-step "[1/12] System packages"
+step "[1/13] System packages"
 
 sudo apt-get update -qq
 sudo apt-get upgrade -y -qq
@@ -131,7 +131,7 @@ ok "Core packages installed"
 # 2. Neovim
 # ===========================================================================
 
-step "[2/12] Neovim (>= ${NVIM_MIN_VERSION})"
+step "[2/13] Neovim (>= ${NVIM_MIN_VERSION})"
 
 NVIM_INSTALLED_VERSION=""
 if command -v nvim &>/dev/null; then
@@ -166,7 +166,7 @@ fi
 # 3. Node.js
 # ===========================================================================
 
-step "[3/12] Node.js ${NODE_MAJOR_VERSION}"
+step "[3/13] Node.js ${NODE_MAJOR_VERSION}"
 
 INSTALLED_NODE_MAJOR=0
 if command -v node &>/dev/null; then
@@ -191,7 +191,7 @@ fi
 # 4. OpenCode
 # ===========================================================================
 
-step "[4/12] OpenCode"
+step "[4/13] OpenCode"
 
 mkdir -p ~/.npm-global
 npm config set prefix '~/.npm-global'
@@ -212,7 +212,7 @@ fi
 # 5. Claude Code CLI
 # ===========================================================================
 
-step "[5/12] Claude Code CLI"
+step "[5/13] Claude Code CLI"
 
 if [ "$SKIP_CLAUDE" = "true" ]; then
     info "Skipping (SKIP_CLAUDE=true)"
@@ -228,7 +228,7 @@ fi
 # 6. fzf
 # ===========================================================================
 
-step "[6/12] fzf"
+step "[6/13] fzf"
 
 if command -v fzf &>/dev/null; then
     ok "fzf $(fzf --version 2>/dev/null | head -1) — already installed"
@@ -250,7 +250,7 @@ fi
 # 7. yazi (terminal file manager — used by four-pane layout)
 # ===========================================================================
 
-step "[7/12] yazi"
+step "[7/13] yazi"
 
 if [ "$SKIP_YAZI" = "true" ]; then
     info "Skipping (SKIP_YAZI=true)"
@@ -280,7 +280,7 @@ fi
 # 8. lazygit (terminal git UI — used by four-pane layout)
 # ===========================================================================
 
-step "[8/12] lazygit"
+step "[8/13] lazygit"
 
 if [ "$SKIP_LAZYGIT" = "true" ]; then
     info "Skipping (SKIP_LAZYGIT=true)"
@@ -311,7 +311,7 @@ fi
 # 9. Oh My Posh
 # ===========================================================================
 
-step "[9/12] Oh My Posh"
+step "[9/13] Oh My Posh"
 
 if [ "$SKIP_OHMYPOSH" = "true" ]; then
     info "Skipping (SKIP_OHMYPOSH=true)"
@@ -328,7 +328,7 @@ fi
 # 10. tmux Plugin Manager (TPM)
 # ===========================================================================
 
-step "[10/12] tmux Plugin Manager (TPM)"
+step "[10/13] tmux Plugin Manager (TPM)"
 
 TPM_DIR="$HOME/.tmux/plugins/tpm"
 
@@ -349,7 +349,7 @@ fi
 # 11. Tailscale
 # ===========================================================================
 
-step "[11/12] Tailscale"
+step "[11/13] Tailscale"
 
 if [ "$SKIP_TAILSCALE" = "true" ]; then
     info "Skipping (SKIP_TAILSCALE=true)"
@@ -362,10 +362,28 @@ else
 fi
 
 # ===========================================================================
-# 12. Config files, shell integration, SSH
+# 12. coda-core (Go helper binary)
 # ===========================================================================
 
-step "[12/12] Config files, completions, and man page"
+step "[12/13] coda-core binary"
+
+if [ -f "$SCRIPT_DIR/coda-core" ] && [ "$SCRIPT_DIR/coda-core" -nt "$SCRIPT_DIR/cmd/coda-core/main.go" ]; then
+    ok "coda-core — up to date"
+elif command -v go &>/dev/null; then
+    info "Building coda-core..."
+    (cd "$SCRIPT_DIR" && go build -o coda-core ./cmd/coda-core/)
+    cp "$SCRIPT_DIR/coda-core" "$HOME/.local/bin/coda-core"
+    ok "coda-core built and installed to ~/.local/bin/"
+else
+    info "Go not found — skipping coda-core build"
+    info "Shell functions will use built-in fallbacks"
+fi
+
+# ===========================================================================
+# 13. Config files, shell integration, SSH
+# ===========================================================================
+
+step "[13/13] Config files, completions, and man page"
 
 # --- tmux config ---
 

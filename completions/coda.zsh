@@ -262,6 +262,9 @@ _coda_layout_args() {
                     local layouts=($(_coda_layouts))
                     _describe 'layout' layouts
                     ;;
+                create)
+                    _arguments '--snapshot[Capture current tmux window layout]'
+                    ;;
             esac
             ;;
     esac

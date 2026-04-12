@@ -169,6 +169,9 @@ _coda_complete() {
                             layouts=$(_coda_layouts)
                             COMPREPLY=($(compgen -W "$layouts" -- "$cur"))
                             ;;
+                        create)
+                            COMPREPLY=($(compgen -W "--snapshot" -- "$cur"))
+                            ;;
                     esac
                     ;;
                 feature)

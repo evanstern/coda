@@ -90,6 +90,7 @@ coda \- OpenCode session and project manager
 .B layout
 .B create
 .I name
+.RB [ \-\-snapshot ]
 .br
 .B coda
 .B watch
@@ -376,14 +377,25 @@ Shows the current default layout.
 Print the layout file contents, including the pane diagram and tmux commands.
 .
 .TP
-.B coda layout create \fIname\fR
-Create a new layout from a commented template in
+.B coda layout create \fIname\fR [\fB\-\-snapshot\fR]
+Create a new layout in
 .BR CODA_LAYOUTS_DIR .
-The template includes example
+Without flags, creates a commented template with example
 .B tmux split-window
 and
 .B tmux send-keys
 patterns for building custom pane arrangements.
+.sp
+With
+.BR \-\-snapshot ,
+captures the current tmux window's pane arrangement, dimensions, commands,
+and titles into a working layout file.
+Must be run from inside a tmux session.
+Pane commands are detected from
+.B pane_start_command
+(the command used when the pane was created).
+Pane titles are included when they are short, clean labels (e.g. set via
+.BR "select-pane -T" ).
 .sp
 Built-in layouts:
 .RS

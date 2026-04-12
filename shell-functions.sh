@@ -1107,6 +1107,7 @@ Usage: coda layout <apply|ls|show|create|name>
   coda layout ls               List available layouts
   coda layout show <name>      Show layout file contents
   coda layout create <name>    Create a new layout from template
+  coda layout create <name> --snapshot  Capture current window layout
 EOF
         ;;
         *)      _coda_layout_apply "$subcmd" "$@" ;;
@@ -1195,9 +1196,16 @@ _coda_layout_show() {
 }
 
 _coda_layout_create() {
-    local name="${1:-}"
+    local name="" snapshot=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --snapshot) snapshot=true; shift ;;
+            *) if [ -z "$name" ]; then name="$1"; fi; shift ;;
+        esac
+    done
+
     if [ -z "$name" ]; then
-        echo "Usage: coda layout create <name>"
+        echo "Usage: coda layout create <name> [--snapshot]"
         return 1
     fi
 
@@ -1207,6 +1215,11 @@ _coda_layout_create() {
     if [ -f "$layout_file" ]; then
         echo "Layout already exists: $layout_file"
         return 1
+    fi
+
+    if [ "$snapshot" = true ]; then
+        _coda_layout_snapshot "$name" "$layout_file"
+        return $?
     fi
 
     cat > "$layout_file" <<TMPL
@@ -1263,6 +1276,312 @@ TMPL
 
     echo "Created: $layout_file"
     echo "Edit it, then apply: coda layout $name"
+}
+
+_coda_layout_snapshot() {
+    local name="$1" layout_file="$2"
+
+    if [ -z "${TMUX:-}" ]; then
+        echo "--snapshot requires being inside a tmux session."
+        return 1
+    fi
+
+    local win_w win_h
+    win_w=$(tmux display-message -p '#{window_width}')
+    win_h=$(tmux display-message -p '#{window_height}')
+
+    local pane_data
+    pane_data=$(tmux list-panes -F '#{pane_index}|#{pane_left}|#{pane_top}|#{pane_width}|#{pane_height}|#{pane_start_command}|#{pane_current_command}|#{pane_title}|#{pane_active}')
+
+    local pane_count
+    pane_count=$(printf '%s\n' "$pane_data" | wc -l)
+
+    if [ "$pane_count" -lt 2 ]; then
+        echo "Only one pane — nothing to snapshot. Use 'coda layout create $name' for a blank template."
+        return 1
+    fi
+
+    local -a p_lefts p_tops p_widths p_heights p_cmds p_titles
+    local active_idx=0
+    while IFS='|' read -r idx left top width height start_cmd cur_cmd title active; do
+        p_lefts+=("$left")
+        p_tops+=("$top")
+        p_widths+=("$width")
+        p_heights+=("$height")
+
+        local cmd
+        cmd=$(_coda_snapshot_clean_start_cmd "$start_cmd")
+        if [ -z "$cmd" ]; then
+            case "$cur_cmd" in
+                bash|zsh|sh|fish) cmd="" ;;
+                *) cmd="$cur_cmd" ;;
+            esac
+        fi
+        p_cmds+=("$cmd")
+
+        local clean_title=""
+        if [ -n "$title" ] && [ "${#title}" -le 20 ] && \
+           [[ "$title" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
+            clean_title="$title"
+        fi
+        p_titles+=("$clean_title")
+
+        [ "$active" = "1" ] && active_idx=$(( ${#p_lefts[@]} - 1 ))
+    done <<< "$pane_data"
+
+    local n=${#p_lefts[@]}
+
+    local tree_result
+    tree_result=$(_coda_snapshot_build_split_plan "$n" p_lefts p_tops p_widths p_heights "$win_w")
+
+    local order_str="${tree_result%%|*}"
+    local dirs_str="${tree_result##*|}"
+    local -a order=($order_str)
+    local -a split_dirs=($dirs_str)
+
+    local has_titles=false
+    for (( i = 0; i < n; i++ )); do
+        [ -n "${p_titles[${order[$i]}]}" ] && has_titles=true
+    done
+
+    _coda_snapshot_write_file "$name" "$layout_file" "$n" "$win_w" "$win_h" \
+        order split_dirs p_lefts p_tops p_widths p_heights p_cmds p_titles "$has_titles"
+
+    chmod +x "$layout_file"
+    echo "Snapshot saved: $layout_file"
+    echo "  Captured $n panes from ${win_w}x${win_h} window"
+    echo "  Apply with: coda layout $name"
+}
+
+_coda_snapshot_clean_start_cmd() {
+    local raw="$1"
+    [ -z "$raw" ] && return
+
+    local cmd="$raw"
+    cmd="${cmd#\"}"
+    cmd="${cmd%\"}"
+
+    cmd="${cmd//\\\\\$/\$}"
+    cmd="${cmd//\\\$/\$}"
+
+    cmd="${cmd%; exec \$SHELL}"
+    cmd="${cmd%; exec \"\$SHELL\"}"
+
+    case "$cmd" in
+        bash|zsh|sh|fish) cmd="" ;;
+    esac
+
+    printf '%s' "$cmd"
+}
+
+_coda_snapshot_build_split_plan() {
+    local n="$1"
+    local -n __s_lefts="$2" __s_tops="$3" __s_widths="$4" __s_heights="$5"
+    local total_w="$6"
+
+    local -a order dirs
+    local min_top="${__s_tops[0]}"
+    local i
+    for (( i = 1; i < n; i++ )); do
+        (( __s_tops[i] < min_top )) && min_top="${__s_tops[$i]}"
+    done
+
+    local first=-1
+    for (( i = 0; i < n; i++ )); do
+        if (( __s_lefts[i] == 0 && __s_tops[i] == min_top )); then
+            first="$i"
+            break
+        fi
+    done
+    (( first < 0 )) && first=0
+    order+=("$first")
+
+    local -a full_w_panes partial_panes
+    for (( i = 0; i < n; i++ )); do
+        (( i == first )) && continue
+        if (( __s_lefts[i] == 0 && __s_widths[i] >= total_w - 1 )); then
+            full_w_panes+=("$i")
+        else
+            partial_panes+=("$i")
+        fi
+    done
+
+    for i in "${full_w_panes[@]}"; do
+        dirs+=("v")
+        order+=("$i")
+    done
+
+    local swapped=true
+    while [ "$swapped" = true ]; do
+        swapped=false
+        local j
+        for (( j = 0; j < ${#partial_panes[@]} - 1; j++ )); do
+            local a="${partial_panes[$j]}" b="${partial_panes[$((j+1))]}"
+            if (( __s_lefts[a] > __s_lefts[b] )); then
+                partial_panes[$j]="$b"
+                partial_panes[$((j+1))]="$a"
+                swapped=true
+            fi
+        done
+    done
+
+    for i in "${partial_panes[@]}"; do
+        dirs+=("h")
+        order+=("$i")
+    done
+
+    echo "${order[*]}|${dirs[*]}"
+}
+
+_coda_snapshot_write_file() {
+    local name="$1" layout_file="$2" n="$3" win_w="$4" win_h="$5"
+    local -n __order="$6" __split_dirs="$7" __w_lefts="$8" __w_tops="$9" __w_widths="${10}" __w_heights="${11}" __w_cmds="${12}" __w_titles="${13}"
+    local has_titles="${14}"
+
+    local first="${__order[0]}"
+    local first_cmd="${__w_cmds[$first]}"
+    local first_title="${__w_titles[$first]}"
+
+    {
+        echo '#!/usr/bin/env bash'
+        echo '#'
+        echo "# ${name}.sh — tmux layout (captured from live session)"
+        echo '#'
+        echo '# $1 = session name    $2 = working directory    $3 = NVIM_APPNAME'
+        echo '#'
+        echo "# Snapshot: ${n} panes from ${win_w}x${win_h} window"
+        echo ''
+
+        echo '_layout_init() {'
+        echo '    local session="$1" dir="$2" nvim_appname="${3:-nvim}"'
+        echo "    local cols=\"\${COLUMNS:-${win_w}}\" rows=\"\${LINES:-${win_h}}\""
+        echo ''
+
+        local init_first_arg=''
+        if [ -n "$first_cmd" ]; then
+            init_first_arg=" \"${first_cmd}; exec \\\$SHELL\""
+        fi
+        echo "    tmux new-session -d -s \"\$session\" -x \"\$cols\" -y \"\$rows\" -c \"\$dir\"${init_first_arg}"
+        if [ -n "$first_title" ]; then
+            echo "    tmux select-pane -t \"\$session\" -T \"${first_title}\""
+        fi
+
+        local i idx cmd title width height dir
+        for (( i = 1; i < n; i++ )); do
+            idx="${__order[$i]}"
+            cmd="${__w_cmds[$idx]}"
+            title="${__w_titles[$idx]}"
+            width="${__w_widths[$idx]}"
+            height="${__w_heights[$idx]}"
+            dir="${__split_dirs[$((i-1))]}"
+
+            echo ''
+            if [ "$dir" = "h" ]; then
+                echo "    local pane${i}_w=\$(( cols * ${width} / ${win_w} ))"
+                if [ -n "$cmd" ]; then
+                    echo "    tmux split-window -h -t \"\$session\" -c \"\$dir\" -l \"\$pane${i}_w\" \\"
+                    echo "        \"${cmd}; exec \\\$SHELL\""
+                else
+                    echo "    tmux split-window -h -t \"\$session\" -c \"\$dir\" -l \"\$pane${i}_w\""
+                fi
+            else
+                echo "    local pane${i}_h=\$(( rows * ${height} / ${win_h} ))"
+                if [ -n "$cmd" ]; then
+                    echo "    tmux split-window -v -t \"\$session\" -c \"\$dir\" -l \"\$pane${i}_h\" \\"
+                    echo "        \"${cmd}; exec \\\$SHELL\""
+                else
+                    echo "    tmux split-window -v -t \"\$session\" -c \"\$dir\" -l \"\$pane${i}_h\""
+                fi
+            fi
+            if [ -n "$title" ]; then
+                echo "    tmux select-pane -t \"\$session\" -T \"${title}\""
+            fi
+
+            if [ "$dir" = "v" ]; then
+                echo '    tmux select-pane -t "$session" -U'
+            fi
+        done
+
+        if [ "$has_titles" = true ]; then
+            echo ''
+            echo '    tmux set-option -t "$session" pane-border-status top'
+            echo '    tmux set-option -t "$session" pane-border-lines heavy'
+            echo "    tmux set-option -t \"\$session\" pane-border-style 'fg=colour245'"
+            echo "    tmux set-option -t \"\$session\" pane-active-border-style 'fg=green,bold'"
+            echo '    tmux set-option -t "$session" pane-border-format '\'' #{?pane_active,▸ ,  }#{pane_title} '\'''
+        fi
+
+        echo '    tmux select-pane -t "$session" -t 0'
+        echo '}'
+        echo ''
+
+        echo '_layout_spawn() {'
+        echo '    local session="$1" dir="$2" nvim_appname="${3:-nvim}"'
+        echo ''
+        echo '    local script'
+        echo '    script=$(mktemp "${TMPDIR:-/tmp}/coda-layout.XXXXXX")'
+        echo '    cat > "$script" <<SETUP'
+        echo '#!/usr/bin/env bash'
+        echo 'rm -f "\$0"'
+        echo 'ph=\$(tmux display-message -p '\''#{pane_height}'\'')'  
+        echo 'pw=\$(tmux display-message -p '\''#{pane_width}'\'')'  
+
+        for (( i = 1; i < n; i++ )); do
+            idx="${__order[$i]}"
+            cmd="${__w_cmds[$idx]}"
+            title="${__w_titles[$idx]}"
+            width="${__w_widths[$idx]}"
+            height="${__w_heights[$idx]}"
+            dir="${__split_dirs[$((i-1))]}"
+
+            echo ''
+            if [ "$dir" = "h" ]; then
+                if [ -n "$cmd" ]; then
+                    echo "tmux split-window -h -c \"\$dir\" -l \\\$(( pw * ${width} / ${win_w} )) \\"
+                    echo "    \"${cmd}; exec \\\\\\\$SHELL\""
+                else
+                    echo "tmux split-window -h -c \"\$dir\" -l \\\$(( pw * ${width} / ${win_w} ))"
+                fi
+            else
+                if [ -n "$cmd" ]; then
+                    echo "tmux split-window -v -c \"\$dir\" -l \\\$(( ph * ${height} / ${win_h} )) \\"
+                    echo "    \"${cmd}; exec \\\\\\\$SHELL\""
+                else
+                    echo "tmux split-window -v -c \"\$dir\" -l \\\$(( ph * ${height} / ${win_h} ))"
+                fi
+            fi
+            if [ -n "$title" ]; then
+                echo "tmux select-pane -T \"${title}\""
+            fi
+            if [ "$dir" = "v" ]; then
+                echo 'tmux select-pane -U'
+            fi
+        done
+
+        if [ "$has_titles" = true ]; then
+            echo ''
+            echo 'tmux set-option pane-border-status top'
+            echo 'tmux set-option pane-border-lines heavy'
+            echo "tmux set-option pane-border-style 'fg=colour245'"
+            echo "tmux set-option pane-active-border-style 'fg=green,bold'"
+            echo 'tmux set-option pane-border-format '\'' #{?pane_active,▸ ,  }#{pane_title} '\'''
+        fi
+
+        echo ''
+        echo 'tmux select-pane -t "\$TMUX_PANE"'
+        if [ -n "$first_cmd" ]; then
+            echo "${first_cmd}; exec \"\\\$SHELL\""
+        else
+            echo 'exec "\$SHELL"'
+        fi
+
+        echo 'SETUP'
+        echo '    chmod +x "$script"'
+        echo '    tmux new-window -t "$session" -c "$dir" "$script"'
+        echo '}'        
+        echo ''
+        echo '_layout_apply() { _layout_init "$@"; }'
+    } > "$layout_file"
 }
 
 # ===========================================================================
@@ -1355,6 +1674,7 @@ USAGE
   coda layout ls                   List available layouts
   coda layout show <name>          Show layout file contents
   coda layout create <name>        Create a new layout from template
+  coda layout create <name> --snapshot  Capture current window layout
 
   coda profile ls                  List profiles
   coda profile create <name>       Create a new profile

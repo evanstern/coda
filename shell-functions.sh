@@ -1561,7 +1561,7 @@ _coda_snapshot_write_file() {
 
         echo 'SETUP'
         echo '    chmod +x "$script"'
-        echo '    tmux new-window -t "$session" -c "$dir" "$script \\"$dir\\""'
+        echo '    tmux new-window -t "$session" -c "$dir" "$script" "$dir"'
         echo '}'        
         echo ''
         echo '_layout_apply() { _layout_init "$@"; }'

@@ -47,6 +47,14 @@ _coda_feature_start() {
         base=$(_coda_detect_default_branch "$project_root")
     fi
 
+    if ! git -C "$project_root" show-ref --quiet 2>/dev/null | grep -q .; then
+        echo "No refs found — fetching from origin..."
+        git -C "$project_root" fetch --all --quiet || {
+            echo "Fetch failed. Check your remote and network."
+            return 1
+        }
+    fi
+
     local worktree_dir="$project_root/$branch"
 
     if [ -d "$worktree_dir" ]; then
@@ -56,8 +64,22 @@ _coda_feature_start() {
         return 0
     fi
 
-    echo "Creating worktree: $branch (from $base)"
-    git -C "$project_root" worktree add -b "$branch" "$worktree_dir" "$base"
+    if git -C "$project_root" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
+        echo "Attaching worktree for existing branch: $branch"
+        git -C "$project_root" worktree add "$worktree_dir" "$branch" || return 1
+    elif git -C "$project_root" show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
+        echo "Creating worktree from remote branch: $branch"
+        git -C "$project_root" worktree add --track -b "$branch" "$worktree_dir" "origin/$branch" || return 1
+    else
+        if git -C "$project_root" show-ref --verify --quiet "refs/heads/$base" 2>/dev/null ||
+           git -C "$project_root" show-ref --verify --quiet "refs/remotes/origin/$base" 2>/dev/null; then
+            echo "Creating worktree: $branch (from $base)"
+            git -C "$project_root" worktree add -b "$branch" "$worktree_dir" "$base" || return 1
+        else
+            echo "Creating worktree: $branch (empty repo, orphan branch)"
+            git -C "$project_root" worktree add --orphan -b "$branch" "$worktree_dir" || return 1
+        fi
+    fi
 
     _coda_attach "${project_name}--${branch}" "$worktree_dir"
 }

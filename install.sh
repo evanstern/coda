@@ -204,7 +204,7 @@ elif command -v opencode &>/dev/null; then
     ok "opencode — already installed"
 else
     info "Installing OpenCode..."
-    npm install -g opencode@latest
+    npm install -g opencode-ai@latest
     ok "OpenCode installed"
 fi
 

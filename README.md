@@ -58,7 +58,7 @@ configures everything in one pass:
 | 1 | System packages: git, tmux, mosh, curl, build-essential, jq, lsof, etc. |
 | 2 | Neovim (latest release from GitHub, upgrades if installed version is too old) |
 | 3 | Node.js via NodeSource (version-aware, won't skip on outdated installs) |
-| 4 | OpenCode via `npm install -g opencode@latest` |
+| 4 | OpenCode via `npm install -g opencode-ai@latest` |
 | 5 | Claude Code CLI via `npm install -g @anthropic-ai/claude-code` |
 | 6 | fzf (fuzzy finder, binary install) |
 | 7 | yazi (terminal file manager, used by four-pane layout) |

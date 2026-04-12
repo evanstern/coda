@@ -839,19 +839,25 @@ _coda_feature_start() {
     fi
 
     local project_root
-    project_root=$(_coda_find_project_root)
-    if [ -z "$project_root" ]; then
-        echo "Not inside a coda project directory."
-        echo "cd into a project first, or run: coda project start --repo <url>"
-        return 1
+    if [ -n "$project_name" ]; then
+        project_root="$PROJECTS_DIR/$project_name"
+        if [ ! -d "$project_root/.bare" ]; then
+            echo "Not a coda project: $project_name"
+            echo "Add it first: coda project start --repo <repo-url>"
+            return 1
+        fi
+    else
+        project_root=$(_coda_find_project_root)
+        if [ -z "$project_root" ]; then
+            echo "Not inside a coda project directory."
+            echo "cd into a project first, or run: coda project start --repo <url>"
+            return 1
+        fi
+        project_name=$(basename "$project_root")
     fi
 
     if [ -z "$base" ]; then
         base=$(_coda_detect_default_branch "$project_root")
-    fi
-
-    if [ -z "$project_name" ]; then
-        project_name=$(basename "$project_root")
     fi
 
     local worktree_dir="$project_root/$branch"
@@ -880,13 +886,19 @@ _coda_feature_done() {
     fi
 
     local project_root
-    project_root=$(_coda_find_project_root)
-    if [ -z "$project_root" ]; then
-        echo "Not inside a coda project directory."
-        return 1
-    fi
-
-    if [ -z "$project_name" ]; then
+    if [ -n "$project_name" ]; then
+        project_root="$PROJECTS_DIR/$project_name"
+        if [ ! -d "$project_root/.bare" ]; then
+            echo "Not a coda project: $project_name"
+            echo "Add it first: coda project start --repo <repo-url>"
+            return 1
+        fi
+    else
+        project_root=$(_coda_find_project_root)
+        if [ -z "$project_root" ]; then
+            echo "Not inside a coda project directory."
+            return 1
+        fi
         project_name=$(basename "$project_root")
     fi
 

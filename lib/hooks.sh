@@ -17,14 +17,12 @@ _coda_run_hooks() {
     shift
 
     local -a hook_dirs=("$CODA_HOOKS_DIR/$event" "$_CODA_DIR/hooks/$event")
-    local found=0
 
     for dir in "${hook_dirs[@]}"; do
         [ -d "$dir" ] || continue
         local hook
         while IFS= read -r hook; do
             [ -f "$hook" ] && [ -x "$hook" ] || continue
-            found=1
             if ! "$hook" "$@" 2>&1; then
                 echo "  hook warning: $(basename "$hook") exited non-zero" >&2
             fi

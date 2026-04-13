@@ -65,9 +65,11 @@ _coda_resolve_effective_config() {
     nvim_appname="$DEFAULT_NVIM_APPNAME"
 
     if [ -n "$project_root" ] && [ -f "$project_root/.coda.env" ]; then
-        local _proj_layout="" _proj_nvim=""
-        _proj_layout=$(. "$project_root/.coda.env" 2>/dev/null && printf '%s' "${CODA_LAYOUT:-}")
-        _proj_nvim=$(. "$project_root/.coda.env" 2>/dev/null && printf '%s' "${CODA_NVIM_APPNAME:-}")
+        local _proj_vals
+        _proj_vals=$(. "$project_root/.coda.env" 2>/dev/null && printf '%s\n%s' "${CODA_LAYOUT:-}" "${CODA_NVIM_APPNAME:-}")
+        local _proj_layout _proj_nvim
+        _proj_layout=$(printf '%s' "$_proj_vals" | sed -n '1p')
+        _proj_nvim=$(printf '%s' "$_proj_vals" | sed -n '2p')
         [ -n "$_proj_layout" ] && layout="$_proj_layout"
         [ -n "$_proj_nvim" ] && nvim_appname="$_proj_nvim"
     fi
@@ -76,9 +78,11 @@ _coda_resolve_effective_config() {
         local profile_file
         profile_file=$(_coda_resolve_profile "$profile_name")
         if [ -n "$profile_file" ]; then
-            local _prof_layout="" _prof_nvim=""
-            _prof_layout=$(. "$profile_file" 2>/dev/null && printf '%s' "${CODA_LAYOUT:-}")
-            _prof_nvim=$(. "$profile_file" 2>/dev/null && printf '%s' "${CODA_NVIM_APPNAME:-}")
+            local _prof_vals
+            _prof_vals=$(. "$profile_file" 2>/dev/null && printf '%s\n%s' "${CODA_LAYOUT:-}" "${CODA_NVIM_APPNAME:-}")
+            local _prof_layout _prof_nvim
+            _prof_layout=$(printf '%s' "$_prof_vals" | sed -n '1p')
+            _prof_nvim=$(printf '%s' "$_prof_vals" | sed -n '2p')
             [ -n "$_prof_layout" ] && layout="$_prof_layout"
             [ -n "$_prof_nvim" ] && nvim_appname="$_prof_nvim"
         fi

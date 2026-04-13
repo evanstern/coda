@@ -22,13 +22,13 @@ _coda_run_hooks() {
     for dir in "${hook_dirs[@]}"; do
         [ -d "$dir" ] || continue
         local hook
-        for hook in "$dir"/*; do
+        while IFS= read -r hook; do
             [ -f "$hook" ] && [ -x "$hook" ] || continue
             found=1
             if ! "$hook" "$@" 2>&1; then
                 echo "  hook warning: $(basename "$hook") exited non-zero" >&2
             fi
-        done
+        done < <(printf '%s\n' "$dir"/* | LC_ALL=C sort)
     done
 
     return 0

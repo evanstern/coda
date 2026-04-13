@@ -19,7 +19,11 @@ _coda_detect_default_branch() {
 }
 
 _coda_find_project_root() {
-    local dir="$PWD"
+    _coda_find_project_root_from "$PWD"
+}
+
+_coda_find_project_root_from() {
+    local dir="${1:-$PWD}"
     while [ "$dir" != "/" ]; do
         if [ -d "$dir/.bare" ] && [ -f "$dir/.git" ] && grep -q "gitdir: ./.bare" "$dir/.git" 2>/dev/null; then
             echo "$dir"
@@ -42,6 +46,50 @@ _coda_find_free_port() {
         fi
         port=$((port + 1))
     done
+}
+
+_coda_load_project_config() {
+    local project_root="${1:-}"
+    [ -z "$project_root" ] && return 0
+    local config_file="$project_root/.coda.env"
+    if [ -f "$config_file" ]; then
+        set -a; source "$config_file"; set +a
+    fi
+}
+
+_coda_resolve_effective_config() {
+    local project_root="${1:-}" profile_name="${2:-}" flag_layout="${3:-}"
+    local layout nvim_appname
+
+    layout="$DEFAULT_LAYOUT"
+    nvim_appname="$DEFAULT_NVIM_APPNAME"
+
+    if [ -n "$project_root" ] && [ -f "$project_root/.coda.env" ]; then
+        local _proj_layout="" _proj_nvim=""
+        _proj_layout=$(. "$project_root/.coda.env" 2>/dev/null && printf '%s' "${CODA_LAYOUT:-}")
+        _proj_nvim=$(. "$project_root/.coda.env" 2>/dev/null && printf '%s' "${CODA_NVIM_APPNAME:-}")
+        [ -n "$_proj_layout" ] && layout="$_proj_layout"
+        [ -n "$_proj_nvim" ] && nvim_appname="$_proj_nvim"
+    fi
+
+    if [ -n "$profile_name" ]; then
+        local profile_file
+        profile_file=$(_coda_resolve_profile "$profile_name")
+        if [ -n "$profile_file" ]; then
+            local _prof_layout="" _prof_nvim=""
+            _prof_layout=$(. "$profile_file" 2>/dev/null && printf '%s' "${CODA_LAYOUT:-}")
+            _prof_nvim=$(. "$profile_file" 2>/dev/null && printf '%s' "${CODA_NVIM_APPNAME:-}")
+            [ -n "$_prof_layout" ] && layout="$_prof_layout"
+            [ -n "$_prof_nvim" ] && nvim_appname="$_prof_nvim"
+        fi
+    fi
+
+    [ -n "${CODA_LAYOUT:-}" ] && layout="$CODA_LAYOUT"
+    [ -n "${CODA_NVIM_APPNAME:-}" ] && nvim_appname="$CODA_NVIM_APPNAME"
+
+    [ -n "$flag_layout" ] && layout="$flag_layout"
+
+    printf '%s\n%s\n' "$layout" "$nvim_appname"
 }
 
 _coda_expand_path() {

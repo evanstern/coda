@@ -149,7 +149,9 @@ lib/
   layout.sh                 Layout management (apply/ls/show/create)
   provider.sh               Auth provider wiring (claude-auth, cliproxyapi)
   profile.sh                Profile management (ls/create/show)
+  hooks.sh                  Lifecycle hook runner
   watch.sh                  Session watcher (start/stop/status)
+hooks/                      Built-in lifecycle hook scripts (post-project-create, etc.)
 cmd/coda-core/              Go companion binary (layout snapshot, provider, watcher)
 tests/                      Shell lifecycle regression tests (bash, mock tmux/fzf)
 test/                       Bats integration tests (module loading, functional)

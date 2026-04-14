@@ -367,11 +367,7 @@ fi
 
 step "[12/13] coda-core binary"
 
-_coda_core_stale=false
-for _gofile in "$SCRIPT_DIR"/cmd/coda-core/*.go; do
-    [ -f "$_gofile" ] && [ "$_gofile" -nt "$SCRIPT_DIR/coda-core" ] && _coda_core_stale=true
-done
-if [ -f "$SCRIPT_DIR/coda-core" ] && [ "$_coda_core_stale" = "false" ]; then
+if [ -f "$SCRIPT_DIR/coda-core" ] && [ "$SCRIPT_DIR/coda-core" -nt "$SCRIPT_DIR/cmd/coda-core/main.go" ]; then
     ok "coda-core — up to date"
 elif command -v go &>/dev/null; then
     info "Building coda-core..."

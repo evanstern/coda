@@ -46,7 +46,6 @@ coda() {
         layout)           _coda_layout_cmd "${args[@]:1}"; status=$? ;;
         profile)          _coda_profile_cmd "${args[@]:1}"; status=$? ;;
         watch)            _coda_watch "${args[@]:1}"; status=$? ;;
-        github)           _coda_github "${args[@]:1}"; status=$? ;;
         help|--help|-h)   _coda_help; status=$? ;;
         "")               _coda_attach; status=$? ;;
         *)                _coda_attach "${args[0]#"$SESSION_PREFIX"}" "${args[@]:1}"; status=$? ;;
@@ -204,10 +203,6 @@ USAGE
   coda watch                       Start monitoring sessions (bell on idle)
   coda watch stop                  Stop the watcher
   coda watch status                Check if watcher is running
-
-  coda github token                Print a GitHub App installation token
-  coda github comment --issue N    Post a comment as Coda [bot]
-  coda github status               Check GitHub App configuration
 
   coda help                   Show this help
 

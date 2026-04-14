@@ -34,7 +34,7 @@ CLIPROXYAPI_HEALTH_URL="${CLIPROXYAPI_HEALTH_URL:-}"
 CLIPROXYAPI_API_KEY="${CLIPROXYAPI_API_KEY:-}"
 
 # Load modules
-for _coda_mod in helpers hooks core project feature layout provider profile watch github; do
+for _coda_mod in helpers hooks core project feature layout provider profile watch; do
     # shellcheck source=/dev/null
     source "$_CODA_DIR/lib/${_coda_mod}.sh"
 done

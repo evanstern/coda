@@ -113,6 +113,11 @@ _coda_resolve_effective_config() {
 
     [ -n "$flag_layout" ] && layout="$flag_layout"
 
+    [ -n "$provider_mode" ] && export CODA_PROVIDER_MODE="$provider_mode"
+    [ -n "$hooks_dir" ] && export CODA_HOOKS_DIR="$hooks_dir"
+    [ -n "$watch_interval" ] && export CODA_WATCH_INTERVAL="$watch_interval"
+    [ -n "$watch_cooldown" ] && export CODA_WATCH_COOLDOWN="$watch_cooldown"
+
     printf '%s\n%s\n' "$layout" "$nvim_appname"
 }
 

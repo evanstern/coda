@@ -5,12 +5,11 @@ _provider_status() {
     config_path=$(_coda_resolve_opencode_config_path)
 
     if command -v coda-core &>/dev/null; then
-        coda-core provider status \
+        CODA_API_KEY="${CLIPROXYAPI_API_KEY:-}" coda-core provider status \
             --mode "cliproxyapi" \
             --config "$config_path" \
             --base-url "${CLIPROXYAPI_BASE_URL:-}" \
             --health-url "${CLIPROXYAPI_HEALTH_URL:-}" \
-            --api-key "${CLIPROXYAPI_API_KEY:-}" \
             --has-opencode "$(command -v opencode &>/dev/null && echo true || echo false)"
         return $?
     fi

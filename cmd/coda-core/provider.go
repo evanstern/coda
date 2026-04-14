@@ -42,12 +42,15 @@ func runProviderAuth(args []string) error {
 	fs := flag.NewFlagSet("provider-auth", flag.ExitOnError)
 	baseURL := fs.String("base-url", "", "CLIProxyAPI base URL")
 	configPath := fs.String("config", "", "OpenCode config file path")
-	apiKey := fs.String("api-key", "", "Optional API key")
+	apiKey := fs.String("api-key", "", "Optional API key (prefer CODA_API_KEY env var)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *baseURL == "" || *configPath == "" {
 		return fmt.Errorf("--base-url and --config are required")
+	}
+	if *apiKey == "" {
+		*apiKey = os.Getenv("CODA_API_KEY")
 	}
 
 	modelsJSON, err := discoverModels(*baseURL, *apiKey)
@@ -73,10 +76,13 @@ func runProviderStatus(args []string) error {
 	configPath := fs.String("config", "", "OpenCode config file path")
 	baseURL := fs.String("base-url", "", "CLIProxyAPI base URL")
 	healthURL := fs.String("health-url", "", "Optional health URL")
-	apiKey := fs.String("api-key", "", "Optional API key")
+	apiKey := fs.String("api-key", "", "Optional API key (prefer CODA_API_KEY env var)")
 	hasOpencode := fs.String("has-opencode", "false", "Whether opencode is installed")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *apiKey == "" {
+		*apiKey = os.Getenv("CODA_API_KEY")
 	}
 
 	fmt.Printf("Provider mode: %s\n", *mode)

@@ -742,9 +742,9 @@ setup() {
     unset CODA_LAYOUT CODA_NVIM_APPNAME CODA_PROVIDER_MODE
     mkdir -p "$CODA_PROFILES_DIR"
     printf 'CODA_PROVIDER_MODE=cliproxyapi\n' > "$CODA_PROFILES_DIR/test-provider.env"
-    result=$(_coda_resolve_effective_config "" "test-provider" "")
+    run _coda_resolve_effective_config "" "test-provider" ""
     rm -f "$CODA_PROFILES_DIR/test-provider.env"
-    [ "$?" -eq 0 ]
+    [ "$status" -eq 0 ]
 }
 
 @test "profile template includes new variables" {

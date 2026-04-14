@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -222,11 +223,13 @@ func (w *watcher) runNotificationScripts(scripts []string, session, paneID strin
 		"SESSION_PREFIX="+w.prefix,
 	)
 	for _, script := range scripts {
-		cmd := exec.Command(script)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		cmd := exec.CommandContext(ctx, script)
 		cmd.Env = env
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "notification warning: %s: %v\n", script, err)
 		}
+		cancel()
 	}
 }
 

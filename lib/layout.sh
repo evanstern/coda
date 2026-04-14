@@ -52,7 +52,10 @@ _coda_layout_apply() {
     _coda_load_layout "$name" || return 1
 
     if declare -f _layout_spawn &>/dev/null; then
-        _layout_spawn "$session" "$dir" "$nvim_appname"
+        if ! _layout_spawn "$session" "$dir" "$nvim_appname"; then
+            echo "Layout '$name' spawn failed."
+            return 1
+        fi
     else
         echo "Layout '$name' does not support spawning into existing sessions."
         echo "Add a _layout_spawn() function to the layout file."

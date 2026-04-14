@@ -19,10 +19,9 @@ _provider_auth() {
     config_path=$(_coda_resolve_opencode_config_path)
 
     if command -v coda-core &>/dev/null; then
-        coda-core provider auth \
+        CODA_API_KEY="${CLIPROXYAPI_API_KEY:-}" coda-core provider auth \
             --base-url "$base_url" \
-            --config "$config_path" \
-            --api-key "${CLIPROXYAPI_API_KEY:-}"
+            --config "$config_path"
         return $?
     fi
 

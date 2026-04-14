@@ -1,0 +1,26 @@
+direction: vertical
+border:
+  status: top
+  lines: heavy
+panes:
+  - direction: horizontal
+    size: "80%"
+    panes:
+      - prefer:
+          - lazygit
+          - gitui
+          - tig
+        title: Git
+        size: "20%"
+      - prefer:
+          - yazi
+          - nnn
+          - lf
+          - ranger
+        title: Explorer
+        size: "40%"
+      - command: opencode
+        title: OpenCode
+        size: "40%"
+  - title: Shell
+    size: "20%"

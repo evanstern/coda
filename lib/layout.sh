@@ -18,7 +18,9 @@ Usage: coda layout <apply|ls|show|create|name>
   coda layout ls               List available layouts
   coda layout show <name>      Show layout file contents
   coda layout create <name>    Create a new layout from template
+  coda layout create <name> --yaml      Create a YAML layout template
   coda layout create <name> --snapshot  Capture current window layout
+  coda layout create <name> --snapshot --yaml  Capture as YAML config
 EOF
         ;;
         *)      _coda_layout_apply "$subcmd" "$@" ;;
@@ -68,18 +70,24 @@ _coda_layout_apply() {
 
 _coda_layout_ls() {
     echo "Available layouts:"
-    local seen="" name source
-    for f in "$CODA_LAYOUTS_DIR"/*.sh "$_CODA_DIR/layouts"/*.sh; do
+    local seen="" name source fmt_tag
+    for f in "$CODA_LAYOUTS_DIR"/*.sh "$CODA_LAYOUTS_DIR"/*.yaml "$_CODA_DIR/layouts"/*.sh "$_CODA_DIR/layouts"/*.yaml; do
         [ -f "$f" ] || continue
-        name=$(basename "${f%.sh}")
+        local base
+        base=$(basename "$f")
+        name="${base%.*}"
         case "$seen" in *"|$name|"*) continue ;; esac
         seen="$seen|$name|"
-        if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ]; then
+        if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ] || [ -f "$CODA_LAYOUTS_DIR/${name}.yaml" ]; then
             source="user"
         else
             source="builtin"
         fi
-        echo "  $name  ($source)"
+        case "$base" in
+            *.yaml) fmt_tag="yaml" ;;
+            *)      fmt_tag="sh" ;;
+        esac
+        echo "  $name  ($source, $fmt_tag)"
     done
     echo ""
     echo "Default: $DEFAULT_LAYOUT"
@@ -98,8 +106,12 @@ _coda_layout_show() {
     local layout_file=""
     if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ]; then
         layout_file="$CODA_LAYOUTS_DIR/${name}.sh"
+    elif [ -f "$CODA_LAYOUTS_DIR/${name}.yaml" ]; then
+        layout_file="$CODA_LAYOUTS_DIR/${name}.yaml"
     elif [ -f "$_CODA_DIR/layouts/${name}.sh" ]; then
         layout_file="$_CODA_DIR/layouts/${name}.sh"
+    elif [ -f "$_CODA_DIR/layouts/${name}.yaml" ]; then
+        layout_file="$_CODA_DIR/layouts/${name}.yaml"
     fi
 
     if [ -z "$layout_file" ]; then
@@ -115,33 +127,47 @@ _coda_layout_show() {
 }
 
 _coda_layout_create() {
-    local name="" snapshot=false
+    local name="" snapshot=false use_yaml=false
     while [ $# -gt 0 ]; do
         case "$1" in
             --snapshot) snapshot=true; shift ;;
+            --yaml)     use_yaml=true; shift ;;
             *) if [ -z "$name" ]; then name="$1"; fi; shift ;;
         esac
     done
 
     if [ -z "$name" ]; then
-        echo "Usage: coda layout create <name> [--snapshot]"
+        echo "Usage: coda layout create <name> [--snapshot] [--yaml]"
         return 1
     fi
 
     mkdir -p "$CODA_LAYOUTS_DIR"
-    local layout_file="$CODA_LAYOUTS_DIR/${name}.sh"
 
-    if [ -f "$layout_file" ]; then
-        echo "Layout already exists: $layout_file"
+    local ext="sh"
+    if [ "$use_yaml" = true ]; then
+        ext="yaml"
+    fi
+    local layout_file="$CODA_LAYOUTS_DIR/${name}.${ext}"
+
+    if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ] || [ -f "$CODA_LAYOUTS_DIR/${name}.yaml" ]; then
+        echo "Layout already exists: $(ls "$CODA_LAYOUTS_DIR"/${name}.* 2>/dev/null)"
         return 1
     fi
 
     if [ "$snapshot" = true ]; then
-        _coda_layout_snapshot "$name" "$layout_file"
+        if [ "$use_yaml" = true ]; then
+            _coda_layout_snapshot_yaml "$name" "$layout_file"
+        else
+            _coda_layout_snapshot "$name" "$layout_file"
+        fi
         return $?
     fi
 
-    _coda_layout_create_template "$name" "$layout_file"
+    if [ "$use_yaml" = true ]; then
+        _coda_layout_create_yaml_template "$name" "$layout_file"
+    else
+        _coda_layout_create_template "$name" "$layout_file"
+    fi
 }
 
 _coda_layout_create_template() {
@@ -194,14 +220,54 @@ _coda_layout_snapshot() {
     _coda_layout_create_template "$name" "$layout_file"
 }
 
+_coda_layout_snapshot_yaml() {
+    local name="$1" layout_file="$2"
+
+    if [ -z "${TMUX:-}" ]; then
+        echo "--snapshot requires being inside a tmux session."
+        return 1
+    fi
+
+    if command -v coda-core &>/dev/null; then
+        coda-core layout snapshot --name "$name" --output "$layout_file" --format yaml
+        return $?
+    fi
+
+    echo "coda-core not found. Install it to use --snapshot --yaml."
+    echo "Falling back to blank YAML template."
+    _coda_layout_create_yaml_template "$name" "$layout_file"
+}
+
+_coda_layout_create_yaml_template() {
+    local name="$1" layout_file="$2"
+
+    cat > "$layout_file" <<TMPL
+direction: horizontal
+panes:
+  - command: "opencode"
+    title: OpenCode
+    size: "50%"
+  - size: "50%"
+TMPL
+
+    echo "Created: $layout_file"
+    echo "Edit it, then apply: coda layout $name"
+}
+
 _coda_load_layout() {
     local name="$1"
-    local layout_file=""
+    local layout_file="" layout_type="sh"
 
     if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ]; then
         layout_file="$CODA_LAYOUTS_DIR/${name}.sh"
     elif [ -f "$_CODA_DIR/layouts/${name}.sh" ]; then
         layout_file="$_CODA_DIR/layouts/${name}.sh"
+    elif [ -f "$CODA_LAYOUTS_DIR/${name}.yaml" ]; then
+        layout_file="$CODA_LAYOUTS_DIR/${name}.yaml"
+        layout_type="yaml"
+    elif [ -f "$_CODA_DIR/layouts/${name}.yaml" ]; then
+        layout_file="$_CODA_DIR/layouts/${name}.yaml"
+        layout_type="yaml"
     fi
 
     if [ -z "$layout_file" ]; then
@@ -213,19 +279,27 @@ _coda_load_layout() {
 
     unset -f _layout_init _layout_spawn _layout_apply 2>/dev/null
 
-    # shellcheck source=/dev/null
-    source "$layout_file"
+    if [ "$layout_type" = "yaml" ]; then
+        if ! command -v coda-core &>/dev/null; then
+            echo "YAML layouts require coda-core. Install it first."
+            return 1
+        fi
+        local rendered
+        rendered=$(coda-core layout render --config "$layout_file" 2>&1)
+        if [ $? -ne 0 ]; then
+            echo "Failed to render YAML layout '$name': $rendered"
+            return 1
+        fi
+        eval "$rendered"
+    else
+        # shellcheck source=/dev/null
+        source "$layout_file"
+    fi
 
-    # Validate: _layout_init is required
     if ! declare -f _layout_init &>/dev/null && ! declare -f _layout_apply &>/dev/null; then
         echo "Layout '$name' is invalid: must define _layout_init() (or legacy _layout_apply())."
         echo "File: $layout_file"
         return 1
-    fi
-
-    # Warn if _layout_spawn is missing (not fatal)
-    if ! declare -f _layout_spawn &>/dev/null; then
-        :
     fi
 
     return 0
@@ -233,9 +307,10 @@ _coda_load_layout() {
 
 _coda_list_layouts() {
     local seen="" name
-    for f in "$CODA_LAYOUTS_DIR"/*.sh "$_CODA_DIR/layouts"/*.sh; do
+    for f in "$CODA_LAYOUTS_DIR"/*.sh "$CODA_LAYOUTS_DIR"/*.yaml "$_CODA_DIR/layouts"/*.sh "$_CODA_DIR/layouts"/*.yaml; do
         [ -f "$f" ] || continue
-        name=$(basename "${f%.sh}")
+        name=$(basename "$f")
+        name="${name%.*}"
         case "$seen" in *"|$name|"*) continue ;; esac
         seen="$seen|$name|"
         echo "$name"

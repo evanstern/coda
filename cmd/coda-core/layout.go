@@ -12,11 +12,13 @@ import (
 
 func runLayout(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: coda-core layout snapshot --name <name> --output <file>")
+		return fmt.Errorf("usage: coda-core layout <snapshot|render> [args]")
 	}
 	switch args[0] {
 	case "snapshot":
 		return runLayoutSnapshot(args[1:])
+	case "render":
+		return runLayoutRender(args[1:])
 	default:
 		return fmt.Errorf("unknown layout subcommand: %s", args[0])
 	}
@@ -26,6 +28,7 @@ func runLayoutSnapshot(args []string) error {
 	fs := flag.NewFlagSet("layout-snapshot", flag.ExitOnError)
 	name := fs.String("name", "", "Layout name")
 	output := fs.String("output", "", "Output file path")
+	format := fs.String("format", "sh", "Output format: sh or yaml")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -38,9 +41,18 @@ func runLayoutSnapshot(args []string) error {
 		return err
 	}
 
-	script := generateLayoutScript(*name, snap)
-	if err := os.WriteFile(*output, []byte(script), 0755); err != nil {
-		return fmt.Errorf("writing layout file: %w", err)
+	switch *format {
+	case "yaml", "yml":
+		if err := writeLayoutYAML(snap, *output); err != nil {
+			return err
+		}
+	case "sh", "":
+		script := generateLayoutScript(*name, snap)
+		if err := os.WriteFile(*output, []byte(script), 0755); err != nil {
+			return fmt.Errorf("writing layout file: %w", err)
+		}
+	default:
+		return fmt.Errorf("unknown format %q (use 'sh' or 'yaml')", *format)
 	}
 
 	fmt.Printf("Snapshot saved: %s\n", *output)

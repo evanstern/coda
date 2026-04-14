@@ -1,0 +1,8 @@
+direction: horizontal
+panes:
+  - command: opencode
+    size: "50%"
+  - command: "nvim ."
+    env:
+      NVIM_APPNAME: "$nvim_appname"
+    size: "50%"

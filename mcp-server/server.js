@@ -5,6 +5,7 @@ const {
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const path = require("path");
+const fs = require("fs");
 const z = require("zod");
 
 const execFileAsync = promisify(execFile);
@@ -69,6 +70,8 @@ const server = new McpServer(
     ].join(" "),
   }
 );
+
+// ── Core tools (always available) ───────────────────────────────────
 
 server.tool(
   "coda_ls",
@@ -195,34 +198,6 @@ server.tool(
 );
 
 server.tool(
-  "coda_watch_status",
-  "Check if the coda session watcher is running",
-  {},
-  async () => formatResult(await runCoda(["watch", "status"]))
-);
-
-server.tool(
-  "coda_watch_start",
-  "Start the background watcher that monitors OpenCode sessions and sends notifications on idle",
-  {},
-  async () => formatResult(await runCoda(["watch", "start"]))
-);
-
-server.tool(
-  "coda_watch_stop",
-  "Stop the background session watcher",
-  {},
-  async () => formatResult(await runCoda(["watch", "stop"]))
-);
-
-server.tool(
-  "coda_provider_status",
-  "Show provider diagnostics for the current coda provider mode (claude-auth or cliproxyapi)",
-  {},
-  async () => formatResult(await runCoda(["provider", "status"], { timeout: 30000 }))
-);
-
-server.tool(
   "coda_layout_ls",
   "List available tmux layouts",
   {},
@@ -243,6 +218,102 @@ server.tool(
   async () => formatResult(await runCoda(["help"]))
 );
 
+// ── Dynamic plugin tools ────────────────────────────────────────────
+
+function pluginNameFromUrl(url) {
+  let name = path.basename(url);
+  if (name.endsWith(".git")) name = name.slice(0, -4);
+  return name;
+}
+
+function buildZodSchema(params) {
+  if (!params || Object.keys(params).length === 0) return {};
+  const schema = {};
+  for (const [name, def] of Object.entries(params)) {
+    const paramType = def.type || "string";
+    let field;
+    if (paramType === "boolean") {
+      field = z.boolean();
+    } else if (paramType === "cwd") {
+      field = z.string();
+    } else {
+      field = z.string();
+    }
+    if (def.description) field = field.describe(def.description);
+    if (def.optional) field = field.optional();
+    schema[name] = field;
+  }
+  return schema;
+}
+
+function buildHandler(command, params) {
+  return async (args) => {
+    const cmdArgs = [...command];
+    let cwd;
+
+    if (params) {
+      for (const [name, def] of Object.entries(params)) {
+        const val = args[name];
+        if (val === undefined || val === null) continue;
+
+        if (def.type === "cwd") {
+          cwd = val;
+        } else if (def.type === "boolean") {
+          if (val) cmdArgs.push(`--${name}`);
+        } else {
+          cmdArgs.push(`--${name}`, String(val));
+        }
+      }
+    }
+
+    return formatResult(await runCoda(cmdArgs, { cwd }));
+  };
+}
+
+function loadPluginTools() {
+  const configPath = process.env.CODA_CONFIG_PATH
+    || path.join(process.env.HOME, ".config", "coda", "config.json");
+  const pluginsDir = process.env.CODA_PLUGINS_DIR
+    || path.join(process.env.HOME, ".config", "coda", "plugins");
+
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch {
+    return;
+  }
+
+  const plugins = config.plugins;
+  if (!plugins || typeof plugins !== "object") return;
+
+  for (const [url, entry] of Object.entries(plugins)) {
+    if (entry.enabled === false) continue;
+
+    const name = pluginNameFromUrl(url);
+    if (!name) continue;
+
+    const pluginJsonPath = path.join(pluginsDir, name, "plugin.json");
+    let pluginJson;
+    try {
+      pluginJson = JSON.parse(fs.readFileSync(pluginJsonPath, "utf8"));
+    } catch {
+      continue;
+    }
+
+    const mcpTools = pluginJson.provides && pluginJson.provides.mcp_tools;
+    if (!mcpTools || typeof mcpTools !== "object") continue;
+
+    for (const [toolName, toolDef] of Object.entries(mcpTools)) {
+      const schema = buildZodSchema(toolDef.params);
+      const handler = buildHandler(toolDef.command, toolDef.params);
+      server.tool(toolName, toolDef.description, schema, handler);
+    }
+  }
+}
+
+loadPluginTools();
+
+// ── Start ───────────────────────────────────────────────────────────
 
 async function main() {
   const transport = new StdioServerTransport();

@@ -22,7 +22,7 @@ setup() {
 }
 
 @test "all lib modules exist on disk" {
-    for mod in helpers core project feature layout provider profile watch; do
+    for mod in helpers core project feature layout provider profile watch plugin; do
         [ -f "$SCRIPT_DIR/lib/${mod}.sh" ]
     done
 }
@@ -908,4 +908,213 @@ setup() {
 @test "coda provider ls is accessible" {
     run coda provider ls
     [ "$status" -eq 0 ]
+}
+
+# --- Plugin system tests ---
+
+@test "_coda_plugin_cmd is defined" {
+    declare -f _coda_plugin_cmd &>/dev/null
+}
+
+@test "_coda_plugin_load_all is defined" {
+    declare -f _coda_plugin_load_all &>/dev/null
+}
+
+@test "_coda_plugin_dispatch is defined" {
+    declare -f _coda_plugin_dispatch &>/dev/null
+}
+
+@test "_coda_plugin_install is defined" {
+    declare -f _coda_plugin_install &>/dev/null
+}
+
+@test "_coda_plugin_remove is defined" {
+    declare -f _coda_plugin_remove &>/dev/null
+}
+
+@test "_coda_plugin_ls is defined" {
+    declare -f _coda_plugin_ls &>/dev/null
+}
+
+@test "coda plugin help shows usage" {
+    run coda plugin help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage"* ]]
+    [[ "$output" == *"install"* ]]
+    [[ "$output" == *"remove"* ]]
+}
+
+@test "coda plugin ls shows message when no plugins" {
+    CODA_PLUGINS_DIR=$(mktemp -d)
+    run _coda_plugin_ls
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No plugins installed"* ]]
+    rm -rf "$CODA_PLUGINS_DIR"
+}
+
+@test "coda help includes plugin subcommands" {
+    run coda help
+    [[ "$output" == *"coda plugin"* ]]
+}
+
+@test "_coda_plugin_load registers commands from mock plugin" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/lib"
+    printf '{"name":"test-plugin","version":"1.0.0","provides":{"commands":{"test-cmd":{"handler":"lib/test.sh","function":"_test_func"}}}}' > "$tmpdir/plugin.json"
+    printf '#!/usr/bin/env bash\n_test_func() { echo "plugin-ran"; }\n' > "$tmpdir/lib/test.sh"
+    _CODA_PLUGIN_COMMANDS=()
+    _coda_plugin_load "test-plugin" "$tmpdir"
+    [[ -n "${_CODA_PLUGIN_COMMANDS[test-cmd]}" ]]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_plugin_dispatch executes plugin command" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/lib"
+    printf '#!/usr/bin/env bash\n_test_dispatch_func() { echo "dispatched"; }\n' > "$tmpdir/lib/handler.sh"
+    _CODA_PLUGIN_COMMANDS=([test-dispatch]="$tmpdir/lib/handler.sh:_test_dispatch_func:$tmpdir")
+    run _coda_plugin_dispatch test-dispatch
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"dispatched"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_plugin_dispatch returns 1 for unknown command" {
+    _CODA_PLUGIN_COMMANDS=()
+    run _coda_plugin_dispatch nonexistent-plugin-cmd
+    [ "$status" -eq 1 ]
+}
+
+@test "_coda_plugin_name_from_url extracts name from SSH URL" {
+    result=$(_coda_plugin_name_from_url "git@github.com:user/coda-github.git")
+    [ "$result" = "coda-github" ]
+}
+
+@test "_coda_plugin_name_from_url extracts name from HTTPS URL" {
+    result=$(_coda_plugin_name_from_url "https://github.com/user/coda-watch.git")
+    [ "$result" = "coda-watch" ]
+}
+
+@test "CODA_PLUGINS_DIR has a default" {
+    [ -n "$CODA_PLUGINS_DIR" ]
+}
+
+# --- Versioning tests ---
+
+@test "CODA_VERSION is set" {
+    [ -n "$CODA_VERSION" ]
+}
+
+@test "coda version prints version" {
+    run coda version
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$CODA_VERSION"* ]]
+}
+
+@test "coda --version prints version" {
+    run coda --version
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"coda"* ]]
+}
+
+@test "_coda_semver_compare equal versions" {
+    result=$(_coda_semver_compare "1.2.3" "1.2.3")
+    [ "$result" -eq 0 ]
+}
+
+@test "_coda_semver_compare greater major" {
+    result=$(_coda_semver_compare "2.0.0" "1.9.9")
+    [ "$result" -eq 1 ]
+}
+
+@test "_coda_semver_compare lesser minor" {
+    result=$(_coda_semver_compare "1.1.0" "1.2.0")
+    [ "$result" -eq -1 ]
+}
+
+@test "_coda_semver_compare patch difference" {
+    result=$(_coda_semver_compare "1.0.1" "1.0.0")
+    [ "$result" -eq 1 ]
+}
+
+@test "_coda_semver_satisfies empty constraint" {
+    _coda_semver_satisfies "1.0.0" ""
+}
+
+@test "_coda_semver_satisfies caret same major" {
+    _coda_semver_satisfies "1.5.3" "^1.0.0"
+}
+
+@test "_coda_semver_satisfies caret rejects next major" {
+    run _coda_semver_satisfies "2.0.0" "^1.0.0"
+    [ "$status" -ne 0 ]
+}
+
+@test "_coda_semver_satisfies caret rejects below" {
+    run _coda_semver_satisfies "0.9.0" "^1.0.0"
+    [ "$status" -ne 0 ]
+}
+
+@test "_coda_semver_satisfies tilde same minor" {
+    _coda_semver_satisfies "1.2.9" "~1.2.0"
+}
+
+@test "_coda_semver_satisfies tilde rejects next minor" {
+    run _coda_semver_satisfies "1.3.0" "~1.2.0"
+    [ "$status" -ne 0 ]
+}
+
+@test "_coda_semver_satisfies exact match" {
+    _coda_semver_satisfies "1.0.0" "1.0.0"
+}
+
+@test "_coda_semver_satisfies exact mismatch" {
+    run _coda_semver_satisfies "1.0.1" "1.0.0"
+    [ "$status" -ne 0 ]
+}
+
+@test "_coda_semver_satisfies range" {
+    _coda_semver_satisfies "1.5.0" ">= 1.0.0 < 2.0.0"
+}
+
+@test "_coda_semver_satisfies range rejects above" {
+    run _coda_semver_satisfies "2.0.0" ">= 1.0.0 < 2.0.0"
+    [ "$status" -ne 0 ]
+}
+
+@test "_coda_semver_satisfies range rejects below" {
+    run _coda_semver_satisfies "0.9.0" ">= 1.0.0 < 2.0.0"
+    [ "$status" -ne 0 ]
+}
+
+@test "_coda_semver_satisfies caret 0.x allows same minor" {
+    _coda_semver_satisfies "0.1.5" "^0.1.0"
+}
+
+@test "_coda_semver_satisfies caret 0.x rejects next major" {
+    run _coda_semver_satisfies "1.0.0" "^0.1.0"
+    [ "$status" -ne 0 ]
+}
+
+@test "plugin load skips incompatible plugin" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/bad-plugin"
+    printf '{"name":"bad","version":"1.0.0","coda":"^99.0.0","provides":{"commands":{"badcmd":{"handler":"h.sh","function":"f"}}}}' > "$tmpdir/bad-plugin/plugin.json"
+    _coda_plugin_load "bad-plugin" "$tmpdir/bad-plugin" 2>/dev/null
+    [ -z "${_CODA_PLUGIN_COMMANDS[badcmd]+x}" ]
+    rm -rf "$tmpdir"
+}
+
+@test "plugin load accepts compatible plugin" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/good-plugin"
+    printf '{"name":"good","version":"1.0.0","coda":"^0.1.0","provides":{"commands":{"goodcmd":{"handler":"h.sh","function":"f"}}}}' > "$tmpdir/good-plugin/plugin.json"
+    _coda_plugin_load "good-plugin" "$tmpdir/good-plugin"
+    [ -n "${_CODA_PLUGIN_COMMANDS[goodcmd]+x}" ]
+    unset '_CODA_PLUGIN_COMMANDS[goodcmd]'
+    rm -rf "$tmpdir"
 }

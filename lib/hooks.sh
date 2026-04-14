@@ -185,5 +185,24 @@ _coda_run_hooks() {
         done < <(printf '%s\n' "$dir"/* | LC_ALL=C sort)
     done
 
+    # Plugin hooks
+    local key
+    for key in "${!_CODA_PLUGIN_HOOKS[@]}"; do
+        local key_event="${key%%:*}"
+        [ "$key_event" = "$event" ] || continue
+        local glob_pattern="${_CODA_PLUGIN_HOOKS[$key]}"
+        IFS='|' read -ra patterns <<< "$glob_pattern"
+        for pattern in "${patterns[@]}"; do
+            local hook
+            for hook in $pattern; do
+                [ -f "$hook" ] && [ -x "$hook" ] || continue
+                found=1
+                if ! "$hook" "$@" 2>&1; then
+                    echo "  hook warning: $(basename "$hook") exited non-zero" >&2
+                fi
+            done
+        done
+    done
+
     return 0
 }

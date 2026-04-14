@@ -59,3 +59,5 @@ coda layout create my-layout --snapshot # capture current window
 ```
 
 Templates include both `_layout_init` and `_layout_spawn` stubs.
+
+Note: Layouts are not currently providable via plugins. Plugins can provide commands, hooks, providers, and notifications. See [plugins.md](plugins.md).

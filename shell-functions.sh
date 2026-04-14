@@ -5,6 +5,8 @@
 # Source in .bashrc or .zshrc:
 #   source ~/coda/shell-functions.sh
 
+CODA_VERSION="0.1.1"
+
 _CODA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _CODA_ENV_FILE="${CODA_ENV_FILE:-$_CODA_DIR/.env}"
@@ -24,7 +26,7 @@ OPENCODE_BASE_PORT="${OPENCODE_BASE_PORT:-4096}"
 OPENCODE_PORT_RANGE="${OPENCODE_PORT_RANGE:-10}"
 AUTO_ATTACH_TMUX="${AUTO_ATTACH_TMUX:-true}"
 DEFAULT_TMUX_SESSION="${DEFAULT_TMUX_SESSION:-default}"
-DEFAULT_LAYOUT="${DEFAULT_LAYOUT:-four-pane}"
+DEFAULT_LAYOUT="${DEFAULT_LAYOUT:-default}"
 DEFAULT_NVIM_APPNAME="${DEFAULT_NVIM_APPNAME:-nvim}"
 CODA_PROFILES_DIR="${CODA_PROFILES_DIR:-$HOME/.config/coda/profiles}"
 CODA_LAYOUTS_DIR="${CODA_LAYOUTS_DIR:-$HOME/.config/coda/layouts}"
@@ -34,13 +36,16 @@ CLIPROXYAPI_HEALTH_URL="${CLIPROXYAPI_HEALTH_URL:-}"
 CLIPROXYAPI_API_KEY="${CLIPROXYAPI_API_KEY:-}"
 CLAUDE_CREDENTIALS_PATH="${CLAUDE_CREDENTIALS_PATH:-$HOME/.claude/.credentials.json}"
 CODA_HOOKS_DIR="${CODA_HOOKS_DIR:-$HOME/.config/coda/hooks}"
+CODA_PLUGINS_DIR="${CODA_PLUGINS_DIR:-$HOME/.config/coda/plugins}"
 
 # Load modules
-for _coda_mod in helpers hooks core project feature layout provider profile watch github; do
+for _coda_mod in helpers hooks core project feature layout provider profile watch github plugin; do
     # shellcheck source=/dev/null
     source "$_CODA_DIR/lib/${_coda_mod}.sh"
 done
 unset _coda_mod
+
+_coda_plugin_load_all
 
 if [ -n "${CODA_OPENCODE_CONFIG_PATH:-}" ]; then
     export OPENCODE_CONFIG="$(_coda_resolve_opencode_config_path)"

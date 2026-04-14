@@ -78,6 +78,7 @@ _coda() {
                 'hooks:manage lifecycle hooks'
                 'provider:manage provider plugins'
                 'github:post comments as Coda bot identity'
+                'plugin:manage plugins'
                 'help:show usage'
             )
             # Add existing sessions as completions
@@ -116,6 +117,9 @@ _coda() {
                     ;;
                 github)
                     _coda_github_args
+                    ;;
+                plugin)
+                    _coda_plugin_args
                     ;;
                 serve)
                     local base="${OPENCODE_BASE_PORT:-4096}"
@@ -392,6 +396,26 @@ _coda_github_args() {
                 'status:check GitHub App configuration'
             )
             _describe 'github subcommand' subcmds
+            ;;
+    esac
+}
+
+_coda_plugin_args() {
+    local state line
+    _arguments -C \
+        '1: :->subcmd' \
+        && return 0
+
+    case $state in
+        subcmd)
+            local -a subcmds
+            subcmds=(
+                'install:install a plugin from a git repo'
+                'remove:remove an installed plugin'
+                'update:update plugin(s) via git pull'
+                'ls:list installed plugins'
+            )
+            _describe 'plugin subcommand' subcmds
             ;;
     esac
 }

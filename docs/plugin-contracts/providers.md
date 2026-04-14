@@ -44,3 +44,19 @@ mkdir -p ~/.config/coda/providers/my-provider
 ```
 
 Set `CODA_PROVIDER_MODE=my-provider` in `.env` to activate it.
+
+## Plugin Providers
+
+Plugins can provide providers via the `provides.providers` field in `plugin.json`:
+
+```json
+{
+  "provides": {
+    "providers": {
+      "my-provider": "providers/my-provider/"
+    }
+  }
+}
+```
+
+Plugin providers follow the same contract (auth.sh + status.sh) and are checked after user and builtin directories. See [plugins.md](plugins.md).

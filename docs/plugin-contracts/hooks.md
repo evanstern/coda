@@ -38,6 +38,22 @@ echo "Session $CODA_SESSION_NAME created in $CODA_SESSION_DIR"
 
 Make it executable: `chmod +x hooks/post-session-create/10-notify`
 
+## Plugin Hooks
+
+Plugins can provide hooks via the `provides.hooks` field in `plugin.json`:
+
+```json
+{
+  "provides": {
+    "hooks": {
+      "post-project-create": ["hooks/post-project-create/*"]
+    }
+  }
+}
+```
+
+Plugin hooks run after user and builtin hooks. Glob patterns are resolved relative to the plugin directory. See [plugins.md](plugins.md).
+
 ## Guarantees
 
 - Hooks receive context via exported environment variables, not positional arguments

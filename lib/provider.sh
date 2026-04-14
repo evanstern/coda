@@ -76,6 +76,15 @@ _coda_provider_ls() {
         fi
         echo "  $name  ($source)$active"
     done
+    for name in "${!_CODA_PLUGIN_PROVIDERS[@]}"; do
+        case "$seen" in *"|$name|"*) continue ;; esac
+        seen="$seen|$name|"
+        local active=""
+        if [ "$name" = "${CODA_PROVIDER_MODE:-claude-auth}" ]; then
+            active=" (active)"
+        fi
+        echo "  $name  (plugin)$active"
+    done
 }
 
 _coda_provider_mode() {
@@ -98,6 +107,8 @@ _coda_find_provider_dir() {
         echo "$CODA_PROVIDERS_DIR/$mode"
     elif [ -d "$_CODA_DIR/providers/$mode" ]; then
         echo "$_CODA_DIR/providers/$mode"
+    elif [[ -n "${_CODA_PLUGIN_PROVIDERS[$mode]+x}" ]]; then
+        echo "${_CODA_PLUGIN_PROVIDERS[$mode]}"
     else
         return 1
     fi
@@ -132,6 +143,11 @@ _coda_list_providers() {
     for d in "$CODA_PROVIDERS_DIR"/*/ "$_CODA_DIR/providers"/*/; do
         [ -d "$d" ] || continue
         name=$(basename "$d")
+        case "$seen" in *"|$name|"*) continue ;; esac
+        seen="$seen|$name|"
+        echo "$name"
+    done
+    for name in "${!_CODA_PLUGIN_PROVIDERS[@]}"; do
         case "$seen" in *"|$name|"*) continue ;; esac
         seen="$seen|$name|"
         echo "$name"

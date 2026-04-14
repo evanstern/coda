@@ -31,6 +31,11 @@ _coda_watch_start() {
     local watcher_cmd
     if command -v coda-core &>/dev/null; then
         watcher_cmd="coda-core watch --interval ${CODA_WATCH_INTERVAL:-5} --cooldown ${CODA_WATCH_COOLDOWN:-60} --prefix ${SESSION_PREFIX} --notifications-dir ${_CODA_DIR}/notifications --user-notifications-dir ${CODA_NOTIFICATIONS_DIR}"
+        local glob
+        for glob in "${_CODA_PLUGIN_NOTIFICATIONS[@]}"; do
+            [ -z "$glob" ] && continue
+            watcher_cmd="$watcher_cmd --plugin-notifications-dir $glob"
+        done
     else
         watcher_cmd="$_CODA_DIR/coda-watcher.sh"
     fi

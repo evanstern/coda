@@ -13,6 +13,11 @@ coda() {
     local args=()
     local status=0
 
+    if [ -z "${_CODA_PLUGINS_CHECKED:-}" ] && [ -t 0 ]; then
+        _CODA_PLUGINS_CHECKED=1
+        _coda_plugin_check_installed
+    fi
+
     while [ $# -gt 0 ]; do
         case "$1" in
             --profile)    _coda_profile="$2"; shift 2 ;;
@@ -48,9 +53,17 @@ coda() {
         profile)          _coda_profile_cmd "${args[@]:1}"; status=$? ;;
         watch)            _coda_watch "${args[@]:1}"; status=$? ;;
         github)           _coda_github "${args[@]:1}"; status=$? ;;
+        plugin)           _coda_plugin_cmd "${args[@]:1}"; status=$? ;;
+        version|--version|-V)  echo "coda $CODA_VERSION"; status=$? ;;
         help|--help|-h)   _coda_help; status=$? ;;
         "")               _coda_attach; status=$? ;;
-        *)                _coda_attach "${args[0]#"$SESSION_PREFIX"}" "${args[@]:1}"; status=$? ;;
+        *)  if _coda_plugin_dispatch "$subcmd" "${args[@]:1}"; then
+                status=$?
+            else
+                _coda_attach "${args[0]#"$SESSION_PREFIX"}" "${args[@]:1}"
+                status=$?
+            fi
+            ;;
     esac
 
     unset CODA_PROFILE CODA_LAYOUT
@@ -223,6 +236,11 @@ USAGE
   coda github token                Print a GitHub App installation token
   coda github comment --issue N    Post a comment as Coda [bot]
   coda github status               Check GitHub App configuration
+
+  coda plugin install <git-url>    Install a plugin from a git repo
+  coda plugin remove <name>        Remove an installed plugin
+  coda plugin update [name]        Update plugin(s) via git pull
+  coda plugin ls                   List installed plugins
 
   coda help                   Show this help
 

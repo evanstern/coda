@@ -306,12 +306,12 @@ V1 does not need to solve every local-desktop workflow.
 6. **The shell should remain a good debugging interface to the system.**
 7. **Users should be able to predict behavior from naming and directory structure alone.**
 
-## Open Questions
+## Open Questions (Resolved)
 
-1. Should project-level config be introduced as `.coda.toml`, `.coda.env`, or another format?
-2. Which hook points are required for v1, and which can wait until later?
-3. Should the watcher remain bundled or move behind optional installation/config?
-4. How much harness customization is necessary before it starts diluting the core model?
+1. **Project-level config format?** `.coda.env` — implemented in `lib/helpers.sh:51-58`. Consistent with the global `.env` format, no new parser needed.
+2. **Which hook points for v1?** 10 events covering the full lifecycle: `pre-session-create`, `post-session-create`, `post-session-attach`, `post-project-create`, `post-project-clone`, `pre-project-close`, `post-feature-create`, `pre-feature-teardown`, `post-feature-finish`, `post-layout-apply`.
+3. **Watcher bundling?** No — companion utility per ADR-0003. Lives in-tree but architecturally separate from core lifecycle.
+4. **Harness customization limit?** Layout + hooks + provider selection. No deeper harness customization for v1. The AI harness launch command is configurable through layouts; auth bridging is configurable through providers.
 
 ## Related ADRs
 

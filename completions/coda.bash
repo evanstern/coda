@@ -53,6 +53,14 @@ _coda_profiles() {
     _coda_list_profiles 2>/dev/null
 }
 
+_coda_hook_events() {
+    echo "pre-session-create post-session-create post-session-attach post-project-create post-project-clone pre-project-close post-feature-create pre-feature-teardown post-feature-finish post-layout-apply"
+}
+
+_coda_providers() {
+    _coda_list_providers 2>/dev/null
+}
+
 _coda_complete() {
     local cur prev words cword
     _init_completion 2>/dev/null || {
@@ -63,7 +71,7 @@ _coda_complete() {
         cword=$COMP_CWORD
     }
 
-    local top_subcommands="attach ls switch serve auth project feature layout profile watch provider github help"
+    local top_subcommands="attach ls switch serve auth project feature layout profile hooks watch provider github help"
 
     # Word positions:
     #   words[0] = coda
@@ -130,8 +138,11 @@ _coda_complete() {
                 watch)
                     COMPREPLY=($(compgen -W "start stop status" -- "$cur"))
                     ;;
+                hooks)
+                    COMPREPLY=($(compgen -W "ls events create run" -- "$cur"))
+                    ;;
                 provider)
-                    COMPREPLY=($(compgen -W "status" -- "$cur"))
+                    COMPREPLY=($(compgen -W "status ls" -- "$cur"))
                     ;;
                 github)
                     COMPREPLY=($(compgen -W "token comment status" -- "$cur"))
@@ -162,6 +173,15 @@ _coda_complete() {
                             local profiles
                             profiles=$(_coda_profiles)
                             COMPREPLY=($(compgen -W "$profiles" -- "$cur"))
+                            ;;
+                    esac
+                    ;;
+                hooks)
+                    case "${words[2]}" in
+                        ls|create|run)
+                            local events
+                            events=$(_coda_hook_events)
+                            COMPREPLY=($(compgen -W "$events" -- "$cur"))
                             ;;
                     esac
                     ;;

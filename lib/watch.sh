@@ -3,9 +3,11 @@
 # watch.sh — coda watch commands (start/stop/status)
 #
 
+CODA_NOTIFICATIONS_DIR="${CODA_NOTIFICATIONS_DIR:-$HOME/.config/coda/notifications}"
+
 _coda_watch() {
     local subcmd="${1:-start}"
-    local watcher_session="coda-watcher"
+    local watcher_session="${SESSION_PREFIX}watcher"
 
     case "$subcmd" in
         start)  _coda_watch_start "$watcher_session" ;;
@@ -28,7 +30,7 @@ _coda_watch_start() {
 
     local watcher_cmd
     if command -v coda-core &>/dev/null; then
-        watcher_cmd="coda-core watch --interval ${CODA_WATCH_INTERVAL:-5} --cooldown ${CODA_WATCH_COOLDOWN:-60} --prefix ${SESSION_PREFIX}"
+        watcher_cmd="coda-core watch --interval ${CODA_WATCH_INTERVAL:-5} --cooldown ${CODA_WATCH_COOLDOWN:-60} --prefix ${SESSION_PREFIX} --notifications-dir ${_CODA_DIR}/notifications --user-notifications-dir ${CODA_NOTIFICATIONS_DIR}"
     else
         watcher_cmd="$_CODA_DIR/coda-watcher.sh"
     fi

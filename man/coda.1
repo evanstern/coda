@@ -93,6 +93,14 @@ coda, coda-dev \- OpenCode session and project manager
 .RB [ \-\-snapshot ]
 .br
 .B coda
+.B hooks
+.RB [ ls | events | create | run ]
+.br
+.B coda
+.B provider
+.RB [ status | ls ]
+.br
+.B coda
 .B watch
 .RB [ start | stop | status ]
 .br
@@ -479,13 +487,85 @@ Create a new profile in
 Profiles are
 .I .env
 files that can override
-.B CODA_LAYOUT
+.BR CODA_LAYOUT ,
+.BR CODA_NVIM_APPNAME ,
+.BR CODA_PROVIDER_MODE ,
+.BR CODA_HOOKS_DIR ,
+.BR CODA_WATCH_INTERVAL ,
 and
-.BR CODA_NVIM_APPNAME .
+.BR CODA_WATCH_COOLDOWN .
 .
 .TP
 .B coda profile show \fIname\fR
 Print the contents of a profile.
+.
+.SS Hooks
+.
+.TP
+.B coda hooks events
+List all supported lifecycle hook events with descriptions.
+.
+.TP
+.B coda hooks ls \fR[\fIevent\fR]
+List installed hook scripts. Optionally filter by event name.
+Shows source (user/builtin) and executable status.
+.
+.TP
+.B coda hooks create \fIevent\fR \fIname\fR
+Scaffold a new hook script in
+.BR CODA_HOOKS_DIR .
+The template includes the environment variables available for that event.
+.
+.TP
+.B coda hooks run \fIevent\fR
+Manually trigger all hooks for an event (useful for debugging).
+.
+.PP
+Hooks are executable scripts in event directories. User hooks
+.RI ( CODA_HOOKS_DIR )
+are checked before builtin hooks. Scripts run in sorted order.
+Failures are reported but never block core operations.
+.
+.PP
+Supported events:
+.BR pre-session-create ,
+.BR post-session-create ,
+.BR post-session-attach ,
+.BR post-project-create ,
+.BR post-project-clone ,
+.BR pre-project-close ,
+.BR post-feature-create ,
+.BR pre-feature-teardown ,
+.BR post-feature-finish ,
+.BR post-layout-apply .
+.
+.SS Providers
+.
+.TP
+.B coda provider ls
+List available provider plugins from both user and builtin directories.
+Shows which provider is currently active.
+.
+.PP
+Providers are directory-based plugins. Each provider contains
+.I auth.sh
+and
+.IR status.sh .
+User providers in
+.B CODA_PROVIDERS_DIR
+override builtins of the same name.
+.
+.SS Notifications
+.
+.PP
+The watcher runs notification plugins when an OpenCode pane transitions from
+processing to idle. Plugins are executable scripts in
+.B CODA_NOTIFICATIONS_DIR
+(user) or the builtin
+.I notifications/
+directory. The default
+.I bell.sh
+sends a terminal bell to all connected tmux clients.
 .
 .SS Help
 .
@@ -523,12 +603,34 @@ CODA_OPENCODE_CONFIG_PATH	empty	Optional OpenCode config override; also exported
 DEFAULT_LAYOUT	default	Default tmux layout
 CODA_LAYOUTS_DIR	~/.config/coda/layouts	User layout directory
 CODA_PROFILES_DIR	~/.config/coda/profiles	User profile directory
+CODA_HOOKS_DIR	~/.config/coda/hooks	User hook scripts directory
+CODA_PROVIDERS_DIR	~/.config/coda/providers	User provider plugins directory
+CODA_NOTIFICATIONS_DIR	~/.config/coda/notifications	User notification plugins directory
+CLAUDE_CREDENTIALS_PATH	~/.claude/.credentials.json	Path to Claude credentials file
+NEW_PROJECT_GITHUB_OWNER	empty	GitHub user/org for \fB--new\fR (required)
 CODA_WATCH_INTERVAL	5	Watcher poll interval (seconds)
 CODA_WATCH_COOLDOWN	60	Min seconds between repeat notifications
 OPENCODE_HEADLESS_PERMISSION	{"*":"allow"}	Permission policy for serve
 AUTO_ATTACH_TMUX	true	Auto-attach on SSH login
 DEFAULT_TMUX_SESSION	default	Session name for auto-attach
 .TE
+.
+.SS Per-project configuration
+.PP
+Place a
+.I .coda.env
+file in a project's worktree root to override settings for that project.
+Supported variables:
+.BR CODA_LAYOUT ,
+.BR CODA_NVIM_APPNAME ,
+.BR CODA_PROVIDER_MODE ,
+.BR CODA_HOOKS_DIR ,
+.BR CODA_WATCH_INTERVAL ,
+.BR CODA_WATCH_COOLDOWN .
+.
+.PP
+Precedence (lowest to highest): built-in defaults, .env, .coda.env, profile,
+environment variable, CLI flag.
 .
 .SH EXAMPLES
 .

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [rearchitect]
+  pull_request:
+    branches: [rearchitect]
+
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./cmd/coda-core/...
+
+  shell-modules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats tmux
+      - name: Build coda-core
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build -o coda-core ./cmd/coda-core/
+      - run: sudo mv coda-core /usr/local/bin/
+      - run: bats test/shell-modules.bats
+
+  stub-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/run.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Run shellcheck
+        run: |
+          shellcheck -x shell-functions.sh lib/*.sh coda-watcher.sh || true

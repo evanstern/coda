@@ -43,6 +43,7 @@ coda() {
         serve)            _coda_serve "${args[@]:1}"; status=$? ;;
         project)          _coda_project "${args[@]:1}"; status=$? ;;
         feature)          _coda_feature "${args[@]:1}"; status=$? ;;
+        hooks)            _coda_hooks "${args[@]:1}"; status=$? ;;
         layout)           _coda_layout_cmd "${args[@]:1}"; status=$? ;;
         profile)          _coda_profile_cmd "${args[@]:1}"; status=$? ;;
         watch)            _coda_watch "${args[@]:1}"; status=$? ;;
@@ -83,6 +84,9 @@ _coda_attach() {
     nvim_appname=$(printf '%s' "$config_lines" | sed -n '2p')
 
     if ! tmux has-session -t "$session" 2>/dev/null; then
+        CODA_SESSION_NAME="$session" CODA_SESSION_DIR="$dir" \
+            _coda_run_hooks pre-session-create
+
         _coda_load_layout "$layout" || return 1
 
         if declare -f _layout_init &>/dev/null; then
@@ -106,6 +110,9 @@ _coda_attach() {
     else
         tmux attach -t "$session"
     fi
+
+    CODA_SESSION_NAME="$session" \
+        _coda_run_hooks post-session-attach
 }
 
 _coda_ls() {
@@ -133,6 +140,7 @@ _coda_switch() {
 
     local session
     session=$(tmux list-sessions -F '#{session_name}' 2>/dev/null \
+        | grep "^${SESSION_PREFIX}" \
         | fzf --preview 'tmux capture-pane -t {} -p -S -30' \
               --preview-window=right:50% \
               --header="Select session  (ESC to cancel)")
@@ -178,6 +186,7 @@ USAGE
   coda serve [port]           Start OpenCode in headless server mode
   coda auth                   Wire the active provider into OpenCode
   coda provider status        Show provider diagnostics
+  coda provider ls             List available providers
 
   coda project start                              Reconnect to main/master session
   coda project start --repo <url> [name]          Clone a repo as a bare project
@@ -190,6 +199,11 @@ USAGE
   coda feature done  <branch> [project]          Teardown worktree + session
   coda feature finish [--force]                  Teardown current feature (agent-safe)
   coda feature ls                                List worktrees for this project
+
+  coda hooks ls [event]            List hook scripts
+  coda hooks events                List all supported events
+  coda hooks create <event> <name> Create a new hook
+  coda hooks run <event>           Manually trigger hooks for an event
 
   coda layout <name>                Apply a layout to the current session
   coda layout ls                   List available layouts

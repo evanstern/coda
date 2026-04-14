@@ -14,9 +14,9 @@ The goal of an ADR in this repo is not to document every idea. It is to capture 
 
 | ADR | Status | Decision |
 | --- | --- | --- |
-| [0001](./0001-core-orchestration-model.md) | Proposed | Coda core is remote tmux + git worktree/session orchestration |
-| [0002](./0002-layouts-and-customization-model.md) | Proposed | Layouts remain first-class; customization prefers config/profiles/hooks over plugins |
-| [0003](./0003-companion-utilities-boundary.md) | Proposed | Machine-specific and auxiliary concerns belong outside the core product boundary |
+| [0001](./0001-core-orchestration-model.md) | Accepted | Coda core is remote tmux + git worktree/session orchestration |
+| [0002](./0002-layouts-and-customization-model.md) | Accepted | Layouts remain first-class; customization prefers config/profiles/hooks over plugins |
+| [0003](./0003-companion-utilities-boundary.md) | Accepted | Machine-specific and auxiliary concerns belong outside the core product boundary |
 
 ## How to use ADRs here
 

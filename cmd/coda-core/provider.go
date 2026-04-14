@@ -14,16 +14,28 @@ import (
 
 func runProvider(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: coda-core provider <auth|status>")
+		return fmt.Errorf("usage: coda-core provider <auth|status|fallback-models>")
 	}
 	switch args[0] {
 	case "auth":
 		return runProviderAuth(args[1:])
 	case "status":
 		return runProviderStatus(args[1:])
+	case "fallback-models":
+		return runProviderFallbackModels()
 	default:
 		return fmt.Errorf("unknown provider subcommand: %s", args[0])
 	}
+}
+
+func runProviderFallbackModels() error {
+	models := fallbackModels()
+	data, err := json.MarshalIndent(models, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
 }
 
 func runProviderAuth(args []string) error {

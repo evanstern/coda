@@ -210,6 +210,8 @@ _coda_feature_finish() {
         if git -C "$project_root" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
             git -C "$project_root" branch -D "$branch" 2>/dev/null
         fi
+        CODA_PROJECT_NAME="$project_name" CODA_FEATURE_BRANCH="$branch" \
+            _coda_run_hooks post-feature-finish
     ) &
     disown
 

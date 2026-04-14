@@ -310,8 +310,9 @@ coda project start --repo git@github.com:user/myapp.git
 coda project start --repo https://github.com/user/myapp.git custom-name
 ```
 
-**Create new** — create a new private repo on GitHub under `evanstern`,
-bootstrap it from a local bare coda project, and push the initial commit:
+**Create new** — create a new private repo on GitHub under your
+`NEW_PROJECT_GITHUB_OWNER`, bootstrap it from a local bare coda project, and
+push the initial commit:
 
 ```bash
 coda project start --new my-tool
@@ -580,7 +581,8 @@ coda profile show dev        # show profile settings
 ```
 
 Profiles are `.env` files stored in `CODA_PROFILES_DIR` that can override
-`CODA_LAYOUT` and `CODA_NVIM_APPNAME`. Use with `--profile`:
+`CODA_LAYOUT`, `CODA_NVIM_APPNAME`, `CODA_PROVIDER_MODE`, `CODA_HOOKS_DIR`,
+`CODA_WATCH_INTERVAL`, and `CODA_WATCH_COOLDOWN`. Use with `--profile`:
 
 ```bash
 coda --profile dev feature start auth
@@ -717,6 +719,11 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `DEFAULT_NVIM_APPNAME` | `nvim` | Neovim config name (maps to `~/.config/<name>/`) |
 | `CODA_LAYOUTS_DIR` | `~/.config/coda/layouts` | User layout scripts directory |
 | `CODA_PROFILES_DIR` | `~/.config/coda/profiles` | User profile overrides directory |
+| `CODA_HOOKS_DIR` | `~/.config/coda/hooks` | User hook scripts directory |
+| `CODA_PROVIDERS_DIR` | `~/.config/coda/providers` | User provider plugins directory |
+| `CODA_NOTIFICATIONS_DIR` | `~/.config/coda/notifications` | User notification plugins directory |
+| `CLAUDE_CREDENTIALS_PATH` | `~/.claude/.credentials.json` | Path to Claude credentials file |
+| `NEW_PROJECT_GITHUB_OWNER` | empty | GitHub user/org for `coda project start --new` (required) |
 | `CODA_WATCH_INTERVAL` | `5` | Watcher poll interval (seconds) |
 | `CODA_WATCH_COOLDOWN` | `60` | Min seconds between repeat notifications per pane |
 | `AUTO_ATTACH_TMUX` | `true` | Auto-attach to tmux on SSH login |
@@ -724,6 +731,22 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `CODA_GITHUB_CLIENT_ID` | empty | GitHub App Client ID (used as JWT issuer) |
 | `CODA_GITHUB_INSTALLATION_ID` | empty | GitHub App Installation ID |
 | `CODA_GITHUB_PRIVATE_KEY_PATH` | `~/.config/coda/github-app-private-key.pem` | Path to the GitHub App private key PEM file |
+
+### Per-Project Configuration
+
+Place a `.coda.env` file in a project's worktree root to override settings for
+that project. Supported variables: `CODA_LAYOUT`, `CODA_NVIM_APPNAME`,
+`CODA_PROVIDER_MODE`, `CODA_HOOKS_DIR`, `CODA_WATCH_INTERVAL`,
+`CODA_WATCH_COOLDOWN`.
+
+```bash
+# ~/projects/myapp/.coda.env
+CODA_LAYOUT="wide-twopane"
+CODA_NVIM_APPNAME="nvim-myapp"
+```
+
+Precedence (lowest to highest): built-in defaults → `.env` → `.coda.env` →
+profile → environment variable → CLI flag.
 
 ---
 

@@ -75,7 +75,8 @@ _coda() {
                 'layout:manage and apply tmux layouts'
                 'profile:manage config profiles'
                 'watch:monitor sessions for attention signals'
-                'provider:manage provider status'
+                'hooks:manage lifecycle hooks'
+                'provider:manage provider plugins'
                 'github:post comments as Coda bot identity'
                 'help:show usage'
             )
@@ -103,6 +104,9 @@ _coda() {
                     ;;
                 profile)
                     _coda_profile_args
+                    ;;
+                hooks)
+                    _coda_hooks_args
                     ;;
                 watch)
                     _coda_watch_args
@@ -321,6 +325,40 @@ _coda_watch_args() {
     esac
 }
 
+_coda_hooks_args() {
+    local state line
+    _arguments -C \
+        '1: :->subcmd' \
+        '2: :->event' \
+        && return 0
+
+    local -a hook_events
+    hook_events=(pre-session-create post-session-create post-session-attach
+                 post-project-create post-project-clone pre-project-close
+                 post-feature-create pre-feature-teardown post-feature-finish
+                 post-layout-apply)
+
+    case $state in
+        subcmd)
+            local -a subcmds
+            subcmds=(
+                'ls:list hook scripts'
+                'events:list all supported events'
+                'create:create a new hook'
+                'run:manually trigger hooks for an event'
+            )
+            _describe 'hooks subcommand' subcmds
+            ;;
+        event)
+            case $line[1] in
+                ls|create|run)
+                    _describe 'event' hook_events
+                    ;;
+            esac
+            ;;
+    esac
+}
+
 _coda_provider_args() {
     local state line
     _arguments -C \
@@ -332,6 +370,7 @@ _coda_provider_args() {
             local -a subcmds
             subcmds=(
                 'status:show provider status'
+                'ls:list available providers'
             )
             _describe 'provider subcommand' subcmds
             ;;

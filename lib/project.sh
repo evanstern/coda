@@ -103,6 +103,12 @@ _coda_project_start_new() {
         return 1
     fi
 
+    if [ -z "$NEW_PROJECT_GITHUB_OWNER" ]; then
+        echo "NEW_PROJECT_GITHUB_OWNER is not set."
+        echo "Add it to your .env: NEW_PROJECT_GITHUB_OWNER=yourgithubuser"
+        return 1
+    fi
+
     if ! command -v gh &>/dev/null; then
         echo "GitHub CLI (gh) is required for --new."
         echo "Install: https://cli.github.com/"
@@ -228,6 +234,9 @@ _coda_project_add() {
     echo "Project ready: $project_dir"
     CODA_PROJECT_NAME="$name" CODA_PROJECT_DIR="$project_dir" \
         _coda_run_hooks post-project-create
+    CODA_PROJECT_NAME="$name" CODA_PROJECT_DIR="$project_dir" \
+    CODA_REPO_URL="$repo" \
+        _coda_run_hooks post-project-clone
     echo "Opening session in $project_dir/$branch"
     _coda_attach "$name" "$project_dir/$branch"
 }
@@ -348,6 +357,9 @@ _coda_project_close() {
                 ;;
         esac
     done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)
+
+    CODA_PROJECT_NAME="$project_name" CODA_PROJECT_DIR="$project_root" \
+        _coda_run_hooks pre-project-close
 
     if [ "$delete" = true ]; then
         echo "Closing project: $project_name"

@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed
+Accepted (2025-07-14)
+
+*Implementation review confirmed alignment between design intent and code. The branch/worktree/session invariant is fully implemented across `lib/core.sh`, `lib/project.sh`, and `lib/feature.sh`.*
 
 ## Context
 

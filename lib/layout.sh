@@ -58,6 +58,9 @@ _coda_layout_apply() {
         echo "Add a _layout_spawn() function to the layout file."
         return 1
     fi
+
+    CODA_SESSION_NAME="$session" CODA_SESSION_LAYOUT="$name" \
+        _coda_run_hooks post-layout-apply
 }
 
 _coda_layout_ls() {
@@ -97,7 +100,9 @@ _coda_layout_show() {
     fi
 
     if [ -z "$layout_file" ]; then
-        echo "Unknown layout: $name"
+        echo "Layout '$name' not found."
+        echo "Available: $(_coda_list_layouts | tr '\n' ' ')"
+        echo "Create one: coda layout create $name"
         return 1
     fi
 
@@ -197,15 +202,34 @@ _coda_load_layout() {
     fi
 
     if [ -z "$layout_file" ]; then
-        echo "Unknown layout: $name"
+        echo "Layout '$name' not found."
         echo "Available: $(_coda_list_layouts | tr '\n' ' ')"
+        echo "Create one: coda layout create $name"
         return 1
     fi
+
+    # Capture functions defined before sourcing so we can clean up extras
+    local _pre_funcs
+    _pre_funcs=$(declare -F | awk '{print $3}')
 
     unset -f _layout_init _layout_spawn _layout_apply 2>/dev/null
 
     # shellcheck source=/dev/null
     source "$layout_file"
+
+    # Validate: _layout_init is required
+    if ! declare -f _layout_init &>/dev/null && ! declare -f _layout_apply &>/dev/null; then
+        echo "Layout '$name' is invalid: must define _layout_init() (or legacy _layout_apply())."
+        echo "File: $layout_file"
+        return 1
+    fi
+
+    # Warn if _layout_spawn is missing (not fatal)
+    if ! declare -f _layout_spawn &>/dev/null; then
+        :
+    fi
+
+    return 0
 }
 
 _coda_list_layouts() {

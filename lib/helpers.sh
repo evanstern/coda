@@ -4,7 +4,7 @@
 #
 
 _coda_sanitize_session_name() {
-    printf '%s' "$1" | tr '.' '-'
+    printf '%s' "$1" | tr './ :' '----'
 }
 
 _coda_detect_default_branch() {
@@ -59,19 +59,31 @@ _coda_load_project_config() {
 
 _coda_resolve_effective_config() {
     local project_root="${1:-}" profile_name="${2:-}" flag_layout="${3:-}"
-    local layout nvim_appname
+    local layout nvim_appname provider_mode hooks_dir watch_interval watch_cooldown
 
     layout="$DEFAULT_LAYOUT"
     nvim_appname="$DEFAULT_NVIM_APPNAME"
+    provider_mode="${CODA_PROVIDER_MODE:-}"
+    hooks_dir="${CODA_HOOKS_DIR:-}"
+    watch_interval="${CODA_WATCH_INTERVAL:-}"
+    watch_cooldown="${CODA_WATCH_COOLDOWN:-}"
 
     if [ -n "$project_root" ] && [ -f "$project_root/.coda.env" ]; then
         local _proj_vals
-        _proj_vals=$(. "$project_root/.coda.env" 2>/dev/null && printf '%s\n%s' "${CODA_LAYOUT:-}" "${CODA_NVIM_APPNAME:-}")
-        local _proj_layout _proj_nvim
-        _proj_layout=$(printf '%s' "$_proj_vals" | sed -n '1p')
-        _proj_nvim=$(printf '%s' "$_proj_vals" | sed -n '2p')
-        [ -n "$_proj_layout" ] && layout="$_proj_layout"
-        [ -n "$_proj_nvim" ] && nvim_appname="$_proj_nvim"
+        _proj_vals=$(
+            . "$project_root/.coda.env" 2>/dev/null
+            printf '%s\t%s\t%s\t%s\t%s\t%s' \
+                "${CODA_LAYOUT:-}" "${CODA_NVIM_APPNAME:-}" \
+                "${CODA_PROVIDER_MODE:-}" "${CODA_HOOKS_DIR:-}" \
+                "${CODA_WATCH_INTERVAL:-}" "${CODA_WATCH_COOLDOWN:-}"
+        )
+        IFS=$'\t' read -r _pl _pn _pp _ph _pwi _pwc <<< "$_proj_vals"
+        [ -n "$_pl" ] && layout="$_pl"
+        [ -n "$_pn" ] && nvim_appname="$_pn"
+        [ -n "$_pp" ] && provider_mode="$_pp"
+        [ -n "$_ph" ] && hooks_dir="$_ph"
+        [ -n "$_pwi" ] && watch_interval="$_pwi"
+        [ -n "$_pwc" ] && watch_cooldown="$_pwc"
     fi
 
     if [ -n "$profile_name" ]; then
@@ -79,12 +91,20 @@ _coda_resolve_effective_config() {
         profile_file=$(_coda_resolve_profile "$profile_name")
         if [ -n "$profile_file" ]; then
             local _prof_vals
-            _prof_vals=$(. "$profile_file" 2>/dev/null && printf '%s\n%s' "${CODA_LAYOUT:-}" "${CODA_NVIM_APPNAME:-}")
-            local _prof_layout _prof_nvim
-            _prof_layout=$(printf '%s' "$_prof_vals" | sed -n '1p')
-            _prof_nvim=$(printf '%s' "$_prof_vals" | sed -n '2p')
-            [ -n "$_prof_layout" ] && layout="$_prof_layout"
-            [ -n "$_prof_nvim" ] && nvim_appname="$_prof_nvim"
+            _prof_vals=$(
+                . "$profile_file" 2>/dev/null
+                printf '%s\t%s\t%s\t%s\t%s\t%s' \
+                    "${CODA_LAYOUT:-}" "${CODA_NVIM_APPNAME:-}" \
+                    "${CODA_PROVIDER_MODE:-}" "${CODA_HOOKS_DIR:-}" \
+                    "${CODA_WATCH_INTERVAL:-}" "${CODA_WATCH_COOLDOWN:-}"
+            )
+            IFS=$'\t' read -r _pl _pn _pp _ph _pwi _pwc <<< "$_prof_vals"
+            [ -n "$_pl" ] && layout="$_pl"
+            [ -n "$_pn" ] && nvim_appname="$_pn"
+            [ -n "$_pp" ] && provider_mode="$_pp"
+            [ -n "$_ph" ] && hooks_dir="$_ph"
+            [ -n "$_pwi" ] && watch_interval="$_pwi"
+            [ -n "$_pwc" ] && watch_cooldown="$_pwc"
         fi
     fi
 

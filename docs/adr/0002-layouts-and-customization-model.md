@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed
+Accepted (2025-07-14)
+
+*Implementation review confirmed alignment. Config → profiles → hooks layering is implemented. `.coda.env` was chosen as the project-level config format. Plugin system deferred per plan.*
 
 ## Context
 

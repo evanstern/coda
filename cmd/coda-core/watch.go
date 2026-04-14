@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -16,16 +17,20 @@ func runWatch(args []string) error {
 	interval := fs.Int("interval", 5, "Poll interval in seconds")
 	cooldown := fs.Int("cooldown", 60, "Min seconds between repeat notifications per pane")
 	prefix := fs.String("prefix", "coda-", "Session name prefix")
+	notificationsDir := fs.String("notifications-dir", "", "Notifications plugin directory (builtin)")
+	userNotificationsDir := fs.String("user-notifications-dir", "", "User notifications directory")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	w := &watcher{
-		interval: time.Duration(*interval) * time.Second,
-		cooldown: time.Duration(*cooldown) * time.Second,
-		prefix:   *prefix,
-		states:   make(map[string]string),
-		notified: make(map[string]time.Time),
+		interval:             time.Duration(*interval) * time.Second,
+		cooldown:             time.Duration(*cooldown) * time.Second,
+		prefix:               *prefix,
+		notificationsDir:     *notificationsDir,
+		userNotificationsDir: *userNotificationsDir,
+		states:               make(map[string]string),
+		notified:             make(map[string]time.Time),
 	}
 
 	fmt.Println("coda-watcher: monitoring OpenCode sessions")
@@ -51,11 +56,13 @@ func runWatch(args []string) error {
 }
 
 type watcher struct {
-	interval time.Duration
-	cooldown time.Duration
-	prefix   string
-	states   map[string]string
-	notified map[string]time.Time
+	interval             time.Duration
+	cooldown             time.Duration
+	prefix               string
+	notificationsDir     string
+	userNotificationsDir string
+	states               map[string]string
+	notified             map[string]time.Time
 }
 
 func (w *watcher) poll() {
@@ -112,7 +119,7 @@ func (w *watcher) listSessions() ([]string, error) {
 
 	var sessions []string
 	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if strings.HasPrefix(name, w.prefix) && name != "coda-watcher" {
+		if strings.HasPrefix(name, w.prefix) && name != w.prefix+"watcher" {
 			sessions = append(sessions, name)
 		}
 	}
@@ -142,12 +149,10 @@ func (w *watcher) capturePane(paneID string) (string, error) {
 	return string(out), nil
 }
 
+var openCodeVersionRe = regexp.MustCompile(`OpenCode \d+\.`)
+
 func isOpenCodePane(content string) bool {
-	return strings.Contains(content, "OpenCode ") &&
-		(strings.Contains(content, "OpenCode 0.") ||
-			strings.Contains(content, "OpenCode 1.") ||
-			strings.Contains(content, "OpenCode 2.") ||
-			strings.Contains(content, "OpenCode 3."))
+	return openCodeVersionRe.MatchString(content)
 }
 
 func detectState(content string) string {
@@ -163,6 +168,63 @@ func (w *watcher) notify(session, key string) {
 		return
 	}
 
+	paneID := ""
+	if parts := strings.SplitN(key, ":", 2); len(parts) == 2 {
+		paneID = parts[1]
+	}
+
+	scripts := w.findNotificationScripts()
+	if len(scripts) > 0 {
+		w.runNotificationScripts(scripts, session, paneID)
+	} else {
+		w.notifyBellFallback(session)
+	}
+
+	w.notified[key] = now
+}
+
+func (w *watcher) findNotificationScripts() []string {
+	var scripts []string
+	for _, dir := range []string{w.userNotificationsDir, w.notificationsDir} {
+		if dir == "" {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			path := dir + "/" + e.Name()
+			info, err := os.Stat(path)
+			if err != nil || info.Mode()&0111 == 0 {
+				continue
+			}
+			scripts = append(scripts, path)
+		}
+	}
+	return scripts
+}
+
+func (w *watcher) runNotificationScripts(scripts []string, session, paneID string) {
+	env := append(os.Environ(),
+		"CODA_SESSION_NAME="+session,
+		"CODA_PANE_ID="+paneID,
+		"CODA_NOTIFICATION_EVENT=idle",
+		"SESSION_PREFIX="+w.prefix,
+	)
+	for _, script := range scripts {
+		cmd := exec.Command(script)
+		cmd.Env = env
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "notification warning: %s: %v\n", script, err)
+		}
+	}
+}
+
+func (w *watcher) notifyBellFallback(session string) {
 	displayName := strings.TrimPrefix(session, w.prefix)
 
 	clientOutput, err := exec.Command("tmux", "list-clients", "-F", "#{client_tty}").Output()
@@ -189,6 +251,4 @@ func (w *watcher) notify(session, key string) {
 		exec.Command("tmux", "display-message", "-c", clientTTY,
 			fmt.Sprintf("coda: %s needs attention", displayName)).Run()
 	}
-
-	w.notified[key] = now
 }

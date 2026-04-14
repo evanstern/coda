@@ -55,11 +55,14 @@ _coda_profile_create() {
 # Coda profile: $name
 # Used with: coda --profile $name [session]
 
-# tmux layout (see available: coda profile ls)
 CODA_LAYOUT="$DEFAULT_LAYOUT"
-
-# Neovim config directory name (~/.config/<CODA_NVIM_APPNAME>/)
 CODA_NVIM_APPNAME="nvim-${name}"
+
+# Optional overrides (uncomment to use):
+# CODA_PROVIDER_MODE="claude-auth"
+# CODA_HOOKS_DIR=""
+# CODA_WATCH_INTERVAL="5"
+# CODA_WATCH_COOLDOWN="60"
 TMPL
 
     echo "Created: $profile_file"
@@ -76,7 +79,9 @@ _coda_profile_show() {
     local profile_file
     profile_file=$(_coda_resolve_profile "$name")
     if [ -z "$profile_file" ]; then
-        echo "Unknown profile: $name"
+        echo "Profile '$name' not found."
+        echo "Available: $(_coda_list_profiles | tr '\n' ' ')"
+        echo "Create one: coda profile create $name"
         return 1
     fi
 

@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed
+Accepted (2025-07-14)
+
+*Implementation review confirmed alignment. Companion utilities (`install.sh`, `coda-watcher.sh`, `scripts/`, provider auth) remain in-tree but are architecturally distinct from core lifecycle operations.*
 
 ## Context
 

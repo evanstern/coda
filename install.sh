@@ -389,7 +389,7 @@ fi
 
 step "[13/14] MCP server"
 
-MCP_DIR="$SCRIPT_DIR/mcp-server"
+MCP_DIR="$STABLE_DIR/mcp-server"
 OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
 MCP_SERVER_PATH="$STABLE_DIR/mcp-server/server.js"
 

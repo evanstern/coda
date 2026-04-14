@@ -91,7 +91,7 @@ err_response=$(mcp_call '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":
 if echo "$err_response" | grep -qi 'error\|exit code\|invalid\|required'; then
     pass "Bad args handled gracefully"
 else
-    pass "Server responded to bad args call"
+    fail "Bad args call did not return an error response"
 fi
 
 # --- Summary ---

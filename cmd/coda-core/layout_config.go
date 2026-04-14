@@ -36,13 +36,6 @@ func (p *PaneConfig) IsLeaf() bool {
 	return len(p.Panes) == 0
 }
 
-func (p *PaneConfig) ResolvedCommand() string {
-	if p.Command != "" {
-		return p.Command
-	}
-	return ""
-}
-
 func parseLayoutConfig(path string) (*LayoutConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

@@ -30,7 +30,7 @@ func snapshotToConfig(snap *snapshot) *LayoutConfig {
 
 	cfg := &LayoutConfig{
 		Direction: tree.direction,
-		Panes:     treeNodeToConfig(tree, paneMap, snap),
+		Panes:     treeNodeToConfig(tree, paneMap),
 	}
 
 	if hasTitles {
@@ -54,7 +54,7 @@ type layoutChild struct {
 	subNode       *layoutNode
 }
 
-func treeNodeToConfig(node *layoutNode, paneMap map[string]paneInfo, snap *snapshot) []PaneConfig {
+func treeNodeToConfig(node *layoutNode, paneMap map[string]paneInfo) []PaneConfig {
 	var panes []PaneConfig
 	totalSize := 0
 	for _, c := range node.children {
@@ -72,10 +72,13 @@ func treeNodeToConfig(node *layoutNode, paneMap map[string]paneInfo, snap *snaps
 		} else if totalSize > 0 {
 			pct = (c.height * 100) / totalSize
 		}
+		if pct < 1 && totalSize > 0 {
+			pct = 1
+		}
 		size := fmt.Sprintf("%d%%", pct)
 
 		if c.subNode != nil {
-			subPanes := treeNodeToConfig(c.subNode, paneMap, snap)
+			subPanes := treeNodeToConfig(c.subNode, paneMap)
 			panes = append(panes, PaneConfig{
 				Direction: c.subNode.direction,
 				Panes:     subPanes,

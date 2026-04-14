@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -100,9 +101,10 @@ func (rc *renderCtx) paneCmd(p flatPane) string {
 	if p.command != "" {
 		cmd := p.command
 		if len(p.env) > 0 {
+			keys := sortedKeys(p.env)
 			var parts []string
-			for k, v := range p.env {
-				parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+			for _, k := range keys {
+				parts = append(parts, fmt.Sprintf("%s=%s", k, p.env[k]))
 			}
 			cmd = strings.Join(parts, " ") + " " + cmd
 		}
@@ -113,6 +115,18 @@ func (rc *renderCtx) paneCmd(p flatPane) string {
 		return fmt.Sprintf("$(_prefer_%d)", rc.preferIndex[key])
 	}
 	return ""
+}
+
+func shellEscapeDouble(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, `$`, `\$`)
+	s = strings.ReplaceAll(s, "`", "\\`")
+	return s
+}
+
+func shellEscapeSingle(s string) string {
+	return strings.ReplaceAll(s, `'`, `'\''`)
 }
 
 func shellFirstWord(cmd string) string {
@@ -130,7 +144,7 @@ func (rc *renderCtx) writePreferBlock(b *strings.Builder, indent string) {
 			if cmd == "$SHELL" || cmd == "\"$SHELL\"" {
 				b.WriteString(fmt.Sprintf("%s    printf '%%s' \"%s\"\n", indent, cmd))
 			} else {
-				b.WriteString(fmt.Sprintf("%s    command -v %s &>/dev/null && { printf '%%s' '%s'; return; }\n", indent, shellFirstWord(cmd), cmd))
+				b.WriteString(fmt.Sprintf("%s    command -v %s &>/dev/null && { printf '%%s' '%s'; return; }\n", indent, shellFirstWord(cmd), shellEscapeSingle(cmd)))
 			}
 		}
 		b.WriteString(fmt.Sprintf("%s    printf '%%s' \"$SHELL\"\n", indent))
@@ -157,7 +171,7 @@ func (rc *renderCtx) writeInitFunc(b *strings.Builder) {
 		b.WriteString("    tmux new-session -d -s \"$session\" -x \"$cols\" -y \"$rows\" -c \"$dir\"\n")
 	}
 	if rc.flat[0].title != "" {
-		b.WriteString(fmt.Sprintf("    tmux select-pane -t \"$session\" -T \"%s\"\n", rc.flat[0].title))
+		b.WriteString(fmt.Sprintf("    tmux select-pane -t \"$session\" -T \"%s\"\n", shellEscapeDouble(rc.flat[0].title)))
 	}
 	writeEnvVars(b, rc.flat[0].env, "    ", "\"$session\"")
 
@@ -191,7 +205,7 @@ func (rc *renderCtx) writeSpawnFunc(b *strings.Builder) {
 	rc.writePreferBlock(b, "")
 
 	if rc.flat[0].title != "" {
-		b.WriteString(fmt.Sprintf("tmux select-pane -T \"%s\"\n", rc.flat[0].title))
+		b.WriteString(fmt.Sprintf("tmux select-pane -T \"%s\"\n", shellEscapeDouble(rc.flat[0].title)))
 	}
 	writeEnvVars(b, rc.flat[0].env, "", "")
 
@@ -255,9 +269,9 @@ func (rc *renderCtx) emitSplits(b *strings.Builder, direction string, panes []Pa
 			}
 			if fp.title != "" {
 				if isInit {
-					b.WriteString(fmt.Sprintf("%stmux select-pane -t \"$session\" -T \"%s\"\n", indent, fp.title))
+					b.WriteString(fmt.Sprintf("%stmux select-pane -t \"$session\" -T \"%s\"\n", indent, shellEscapeDouble(fp.title)))
 				} else {
-					b.WriteString(fmt.Sprintf("%stmux select-pane -T \"%s\"\n", indent, fp.title))
+					b.WriteString(fmt.Sprintf("%stmux select-pane -T \"%s\"\n", indent, shellEscapeDouble(fp.title)))
 				}
 			}
 			*leafIdx++
@@ -275,9 +289,9 @@ func (rc *renderCtx) emitSplits(b *strings.Builder, direction string, panes []Pa
 				}
 				if fp.title != "" {
 					if isInit {
-						b.WriteString(fmt.Sprintf("%stmux select-pane -t \"$session\" -T \"%s\"\n", indent, fp.title))
+						b.WriteString(fmt.Sprintf("%stmux select-pane -t \"$session\" -T \"%s\"\n", indent, shellEscapeDouble(fp.title)))
 					} else {
-						b.WriteString(fmt.Sprintf("%stmux select-pane -T \"%s\"\n", indent, fp.title))
+						b.WriteString(fmt.Sprintf("%stmux select-pane -T \"%s\"\n", indent, shellEscapeDouble(fp.title)))
 					}
 				}
 			}
@@ -296,6 +310,15 @@ func (rc *renderCtx) firstLeafIndex(panes []PaneConfig) int {
 	return -1
 }
 
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func sizeFlag(size string) string {
 	if size == "" {
 		return ""
@@ -307,11 +330,13 @@ func sizeFlag(size string) string {
 }
 
 func writeEnvVars(b *strings.Builder, env map[string]string, indent, target string) {
-	for k, v := range env {
+	keys := sortedKeys(env)
+	for _, k := range keys {
+		v := env[k]
 		if target != "" {
-			b.WriteString(fmt.Sprintf("%stmux set-environment -t %s %s \"%s\"\n", indent, target, k, v))
+			b.WriteString(fmt.Sprintf("%stmux set-environment -t %s %s \"%s\"\n", indent, target, k, shellEscapeDouble(v)))
 		} else {
-			b.WriteString(fmt.Sprintf("%stmux set-environment %s \"%s\"\n", indent, k, v))
+			b.WriteString(fmt.Sprintf("%stmux set-environment %s \"%s\"\n", indent, k, shellEscapeDouble(v)))
 		}
 	}
 }
@@ -348,7 +373,7 @@ func writeBorderSetup(b *strings.Builder, border *BorderConfig, indent, target s
 
 	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-status %s\n", indent, targetArg, status))
 	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-lines %s\n", indent, targetArg, lines))
-	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-style '%s'\n", indent, targetArg, style))
-	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-active-border-style '%s'\n", indent, targetArg, activeStyle))
-	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-format '%s'\n", indent, targetArg, borderFormat))
+	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-style '%s'\n", indent, targetArg, shellEscapeSingle(style)))
+	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-active-border-style '%s'\n", indent, targetArg, shellEscapeSingle(activeStyle)))
+	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-format '%s'\n", indent, targetArg, shellEscapeSingle(borderFormat)))
 }

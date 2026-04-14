@@ -149,8 +149,11 @@ _coda_layout_create() {
     fi
     local layout_file="$CODA_LAYOUTS_DIR/${name}.${ext}"
 
-    if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ] || [ -f "$CODA_LAYOUTS_DIR/${name}.yaml" ]; then
-        echo "Layout already exists: $(ls "$CODA_LAYOUTS_DIR"/${name}.* 2>/dev/null)"
+    local existing=""
+    [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ] && existing="$CODA_LAYOUTS_DIR/${name}.sh"
+    [ -f "$CODA_LAYOUTS_DIR/${name}.yaml" ] && existing="${existing:+$existing }$CODA_LAYOUTS_DIR/${name}.yaml"
+    if [ -n "$existing" ]; then
+        echo "Layout already exists: $existing"
         return 1
     fi
 
@@ -260,11 +263,11 @@ _coda_load_layout() {
 
     if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ]; then
         layout_file="$CODA_LAYOUTS_DIR/${name}.sh"
-    elif [ -f "$_CODA_DIR/layouts/${name}.sh" ]; then
-        layout_file="$_CODA_DIR/layouts/${name}.sh"
     elif [ -f "$CODA_LAYOUTS_DIR/${name}.yaml" ]; then
         layout_file="$CODA_LAYOUTS_DIR/${name}.yaml"
         layout_type="yaml"
+    elif [ -f "$_CODA_DIR/layouts/${name}.sh" ]; then
+        layout_file="$_CODA_DIR/layouts/${name}.sh"
     elif [ -f "$_CODA_DIR/layouts/${name}.yaml" ]; then
         layout_file="$_CODA_DIR/layouts/${name}.yaml"
         layout_type="yaml"
@@ -284,13 +287,25 @@ _coda_load_layout() {
             echo "YAML layouts require coda-core. Install it first."
             return 1
         fi
-        local rendered
-        rendered=$(coda-core layout render --config "$layout_file" 2>&1)
-        if [ $? -ne 0 ]; then
-            echo "Failed to render YAML layout '$name': $rendered"
+        local rendered_file render_error
+        rendered_file=$(mktemp "${TMPDIR:-/tmp}/coda-layout-render.XXXXXX") || {
+            echo "Failed to create temporary file for rendered layout."
+            return 1
+        }
+        if ! coda-core layout render --config "$layout_file" >"$rendered_file" 2>&1; then
+            render_error=$(cat "$rendered_file")
+            rm -f "$rendered_file"
+            echo "Failed to render YAML layout '$name': $render_error"
             return 1
         fi
-        eval "$rendered"
+        if ! bash -n "$rendered_file" >/dev/null 2>&1; then
+            rm -f "$rendered_file"
+            echo "Rendered YAML layout '$name' produced invalid shell."
+            return 1
+        fi
+        # shellcheck source=/dev/null
+        source "$rendered_file"
+        rm -f "$rendered_file"
     else
         # shellcheck source=/dev/null
         source "$layout_file"

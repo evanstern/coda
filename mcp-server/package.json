@@ -4,7 +4,8 @@
   "description": "MCP server exposing coda CLI tools to OpenCode agents",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "bash test.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

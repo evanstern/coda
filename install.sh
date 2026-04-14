@@ -107,7 +107,7 @@ echo ""
 # 1. System packages
 # ===========================================================================
 
-step "[1/13] System packages"
+step "[1/14] System packages"
 
 sudo apt-get update -qq
 sudo apt-get upgrade -y -qq
@@ -131,7 +131,7 @@ ok "Core packages installed"
 # 2. Neovim
 # ===========================================================================
 
-step "[2/13] Neovim (>= ${NVIM_MIN_VERSION})"
+step "[2/14] Neovim (>= ${NVIM_MIN_VERSION})"
 
 NVIM_INSTALLED_VERSION=""
 if command -v nvim &>/dev/null; then
@@ -166,7 +166,7 @@ fi
 # 3. Node.js
 # ===========================================================================
 
-step "[3/13] Node.js ${NODE_MAJOR_VERSION}"
+step "[3/14] Node.js ${NODE_MAJOR_VERSION}"
 
 INSTALLED_NODE_MAJOR=0
 if command -v node &>/dev/null; then
@@ -191,7 +191,7 @@ fi
 # 4. OpenCode
 # ===========================================================================
 
-step "[4/13] OpenCode"
+step "[4/14] OpenCode"
 
 mkdir -p ~/.npm-global
 npm config set prefix '~/.npm-global'
@@ -212,7 +212,7 @@ fi
 # 5. Claude Code CLI
 # ===========================================================================
 
-step "[5/13] Claude Code CLI"
+step "[5/14] Claude Code CLI"
 
 if [ "$SKIP_CLAUDE" = "true" ]; then
     info "Skipping (SKIP_CLAUDE=true)"
@@ -228,7 +228,7 @@ fi
 # 6. fzf
 # ===========================================================================
 
-step "[6/13] fzf"
+step "[6/14] fzf"
 
 if command -v fzf &>/dev/null; then
     ok "fzf $(fzf --version 2>/dev/null | head -1) — already installed"
@@ -250,7 +250,7 @@ fi
 # 7. yazi (terminal file manager — used by four-pane layout)
 # ===========================================================================
 
-step "[7/13] yazi"
+step "[7/14] yazi"
 
 if [ "$SKIP_YAZI" = "true" ]; then
     info "Skipping (SKIP_YAZI=true)"
@@ -280,7 +280,7 @@ fi
 # 8. lazygit (terminal git UI — used by four-pane layout)
 # ===========================================================================
 
-step "[8/13] lazygit"
+step "[8/14] lazygit"
 
 if [ "$SKIP_LAZYGIT" = "true" ]; then
     info "Skipping (SKIP_LAZYGIT=true)"
@@ -311,7 +311,7 @@ fi
 # 9. Oh My Posh
 # ===========================================================================
 
-step "[9/13] Oh My Posh"
+step "[9/14] Oh My Posh"
 
 if [ "$SKIP_OHMYPOSH" = "true" ]; then
     info "Skipping (SKIP_OHMYPOSH=true)"
@@ -328,7 +328,7 @@ fi
 # 10. tmux Plugin Manager (TPM)
 # ===========================================================================
 
-step "[10/13] tmux Plugin Manager (TPM)"
+step "[10/14] tmux Plugin Manager (TPM)"
 
 TPM_DIR="$HOME/.tmux/plugins/tpm"
 
@@ -349,7 +349,7 @@ fi
 # 11. Tailscale
 # ===========================================================================
 
-step "[11/13] Tailscale"
+step "[11/14] Tailscale"
 
 if [ "$SKIP_TAILSCALE" = "true" ]; then
     info "Skipping (SKIP_TAILSCALE=true)"
@@ -365,7 +365,7 @@ fi
 # 12. coda-core (Go helper binary)
 # ===========================================================================
 
-step "[12/13] coda-core binary"
+step "[12/14] coda-core binary"
 
 _coda_core_stale=false
 _coda_core_installed="$HOME/.local/bin/coda-core"
@@ -395,10 +395,55 @@ else
 fi
 
 # ===========================================================================
-# 13. Config files, shell integration, SSH
+# 13. MCP server (exposes coda tools to OpenCode agents)
 # ===========================================================================
 
-step "[13/13] Config files, completions, and man page"
+step "[13/14] MCP server"
+
+MCP_DIR="$STABLE_DIR/mcp-server"
+OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+MCP_SERVER_PATH="$STABLE_DIR/mcp-server/server.js"
+
+if [ -d "$MCP_DIR" ] && command -v node &>/dev/null; then
+    if [ ! -d "$MCP_DIR/node_modules" ] || [ "$MCP_DIR/package.json" -nt "$MCP_DIR/node_modules/.package-lock.json" ]; then
+        info "Installing MCP server dependencies..."
+        (cd "$MCP_DIR" && npm install --no-fund --no-audit --loglevel=error)
+        ok "MCP server dependencies installed"
+    else
+        ok "MCP server dependencies — up to date"
+    fi
+
+    mkdir -p "$HOME/.config/opencode"
+    if [ ! -f "$OPENCODE_CONFIG" ]; then
+        printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {}\n}\n' > "$OPENCODE_CONFIG"
+    fi
+
+    if command -v jq &>/dev/null; then
+        _mcp_current=$(jq -r '.mcp.coda.command[1] // ""' "$OPENCODE_CONFIG" 2>/dev/null || true)
+        if [ "$_mcp_current" = "$MCP_SERVER_PATH" ]; then
+            ok "MCP server — already registered in opencode.json"
+        else
+            jq --arg path "$MCP_SERVER_PATH" '.mcp.coda = {"type": "local", "command": ["node", $path], "enabled": true}' \
+                "$OPENCODE_CONFIG" > "$OPENCODE_CONFIG.tmp" && mv "$OPENCODE_CONFIG.tmp" "$OPENCODE_CONFIG"
+            ok "MCP server registered in opencode.json"
+        fi
+    else
+        info "jq not found — skipping opencode.json MCP registration"
+        info "Add manually: {\"mcp\":{\"coda\":{\"type\":\"local\",\"command\":[\"node\",\"$MCP_SERVER_PATH\"],\"enabled\":true}}}"
+    fi
+else
+    if [ ! -d "$MCP_DIR" ]; then
+        info "MCP server directory not found — skipping"
+    else
+        info "Node.js not found — skipping MCP server setup"
+    fi
+fi
+
+# ===========================================================================
+# 14. Config files, shell integration, SSH
+# ===========================================================================
+
+step "[14/14] Config files, completions, and man page"
 
 # --- tmux config ---
 

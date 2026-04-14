@@ -1,0 +1,13 @@
+{
+  "name": "@coda/mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server exposing coda CLI tools to OpenCode agents",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.3.6"
+  }
+}

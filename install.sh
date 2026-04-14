@@ -368,10 +368,21 @@ fi
 step "[12/13] coda-core binary"
 
 _coda_core_stale=false
-for _gofile in "$SCRIPT_DIR"/cmd/coda-core/*.go; do
-    [ -f "$_gofile" ] && [ "$_gofile" -nt "$SCRIPT_DIR/coda-core" ] && _coda_core_stale=true
-done
-if [ -f "$SCRIPT_DIR/coda-core" ] && [ "$_coda_core_stale" = "false" ]; then
+_coda_core_installed="$HOME/.local/bin/coda-core"
+mkdir -p "$(dirname "$_coda_core_installed")"
+if [ ! -f "$_coda_core_installed" ]; then
+    _coda_core_stale=true
+elif [ -f "$SCRIPT_DIR/coda-core" ]; then
+    for _gofile in "$SCRIPT_DIR"/cmd/coda-core/*.go; do
+        [ -f "$_gofile" ] && [ "$_gofile" -nt "$SCRIPT_DIR/coda-core" ] && _coda_core_stale=true
+    done
+    [ "$SCRIPT_DIR/coda-core" -nt "$_coda_core_installed" ] && _coda_core_stale=true
+else
+    for _gofile in "$SCRIPT_DIR"/cmd/coda-core/*.go; do
+        [ -f "$_gofile" ] && [ "$_gofile" -nt "$_coda_core_installed" ] && _coda_core_stale=true
+    done
+fi
+if [ "$_coda_core_stale" = "false" ]; then
     ok "coda-core — up to date"
 elif command -v go &>/dev/null; then
     info "Building coda-core..."

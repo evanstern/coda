@@ -68,24 +68,24 @@ func TestFindNotificationScriptsEmptyDir(t *testing.T) {
 	}
 }
 
-func TestFindNotificationScriptsUserOverridesBuiltin(t *testing.T) {
+func TestFindNotificationScriptsUserShadowsBuiltin(t *testing.T) {
 	builtinDir := t.TempDir()
 	userDir := t.TempDir()
 
-	builtinScript := filepath.Join(builtinDir, "bell.sh")
-	os.WriteFile(builtinScript, []byte("#!/bin/sh\necho builtin"), 0755)
+	os.WriteFile(filepath.Join(builtinDir, "bell.sh"), []byte("#!/bin/sh\necho builtin"), 0755)
+	os.WriteFile(filepath.Join(builtinDir, "extra.sh"), []byte("#!/bin/sh\necho extra"), 0755)
 
-	userScript := filepath.Join(userDir, "custom.sh")
-	os.WriteFile(userScript, []byte("#!/bin/sh\necho custom"), 0755)
+	userBell := filepath.Join(userDir, "bell.sh")
+	os.WriteFile(userBell, []byte("#!/bin/sh\necho user-bell"), 0755)
 
 	w := &watcher{notificationsDir: builtinDir, userNotificationsDir: userDir}
 	scripts := w.findNotificationScripts()
 
 	if len(scripts) != 2 {
-		t.Fatalf("expected 2 scripts (user + builtin), got %d: %v", len(scripts), scripts)
+		t.Fatalf("expected 2 scripts (user bell.sh shadows builtin bell.sh, plus builtin extra.sh), got %d: %v", len(scripts), scripts)
 	}
-	if scripts[0] != userScript {
-		t.Errorf("expected user script first, got %s", scripts[0])
+	if scripts[0] != userBell {
+		t.Errorf("expected user bell.sh first, got %s", scripts[0])
 	}
 }
 

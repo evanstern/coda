@@ -107,12 +107,13 @@ _coda_attach() {
 
     if [ -n "${TMUX:-}" ]; then
         tmux switch-client -t "$session"
+        CODA_SESSION_NAME="$session" \
+            _coda_run_hooks post-session-attach
     else
+        CODA_SESSION_NAME="$session" \
+            _coda_run_hooks post-session-attach
         tmux attach -t "$session"
     fi
-
-    CODA_SESSION_NAME="$session" \
-        _coda_run_hooks post-session-attach
 }
 
 _coda_ls() {

@@ -208,10 +208,6 @@ _coda_load_layout() {
         return 1
     fi
 
-    # Capture functions defined before sourcing so we can clean up extras
-    local _pre_funcs
-    _pre_funcs=$(declare -F | awk '{print $3}')
-
     unset -f _layout_init _layout_spawn _layout_apply 2>/dev/null
 
     # shellcheck source=/dev/null

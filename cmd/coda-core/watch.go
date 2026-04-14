@@ -185,6 +185,7 @@ func (w *watcher) notify(session, key string) {
 
 func (w *watcher) findNotificationScripts() []string {
 	var scripts []string
+	seen := make(map[string]bool)
 	for _, dir := range []string{w.userNotificationsDir, w.notificationsDir} {
 		if dir == "" {
 			continue
@@ -197,11 +198,16 @@ func (w *watcher) findNotificationScripts() []string {
 			if e.IsDir() {
 				continue
 			}
-			path := dir + "/" + e.Name()
+			name := e.Name()
+			if seen[name] {
+				continue
+			}
+			path := dir + "/" + name
 			info, err := os.Stat(path)
 			if err != nil || info.Mode()&0111 == 0 {
 				continue
 			}
+			seen[name] = true
 			scripts = append(scripts, path)
 		}
 	}

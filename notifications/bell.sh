@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# bell.sh u2014 default notification: send BEL to all connected tmux clients
+# bell.sh -- default notification: send BEL to all connected tmux clients
 #
 # Env vars available:
-#   CODA_PANE_ID         u2014 pane that transitioned to idle
-#   CODA_SESSION_NAME    u2014 tmux session name
-#   CODA_NOTIFICATION_EVENT u2014 event type (e.g., "idle")
+#   CODA_PANE_ID         -- pane that transitioned to idle
+#   CODA_SESSION_NAME    -- tmux session name
+#   CODA_NOTIFICATION_EVENT -- event type (e.g., "idle")
 
 local_session="${CODA_SESSION_NAME:-unknown}"
 local_prefix="${SESSION_PREFIX:-coda-}"

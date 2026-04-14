@@ -23,10 +23,10 @@ Defines `_provider_status()`. Called by `coda provider status`.
 
 Provider scripts are sourced into the shell, so all coda helpers are available:
 
-- `_coda_resolve_opencode_config_path` u2014 path to managed OpenCode config
-- `_coda_validate_api_key` u2014 rejects CRLF injection
-- `_coda_normalize_url` u2014 validates and normalizes HTTP(S) URLs
-- `_coda_probe_url` / `_coda_print_url_status` u2014 HTTP health checks
+- `_coda_resolve_opencode_config_path` -- path to managed OpenCode config
+- `_coda_validate_api_key` -- rejects CRLF injection
+- `_coda_normalize_url` -- validates and normalizes HTTP(S) URLs
+- `_coda_probe_url` / `_coda_print_url_status` -- HTTP health checks
 
 ## Built-in Providers
 

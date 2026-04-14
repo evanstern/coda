@@ -125,8 +125,10 @@ _coda_hooks_create() {
 TMPL
 
     case "$event" in
-        pre-session-create|post-session-create)
+        pre-session-create)
             printf '#   CODA_SESSION_NAME, CODA_SESSION_DIR\n' >> "$hook_file" ;;
+        post-session-create)
+            printf '#   CODA_SESSION_NAME, CODA_SESSION_DIR, CODA_SESSION_LAYOUT\n' >> "$hook_file" ;;
         post-session-attach)
             printf '#   CODA_SESSION_NAME\n' >> "$hook_file" ;;
         post-project-create)
@@ -135,8 +137,10 @@ TMPL
             printf '#   CODA_PROJECT_NAME, CODA_PROJECT_DIR, CODA_REPO_URL\n' >> "$hook_file" ;;
         pre-project-close)
             printf '#   CODA_PROJECT_NAME, CODA_PROJECT_DIR\n' >> "$hook_file" ;;
-        post-feature-create|pre-feature-teardown)
+        post-feature-create)
             printf '#   CODA_PROJECT_NAME, CODA_PROJECT_DIR, CODA_FEATURE_BRANCH, CODA_WORKTREE_DIR\n' >> "$hook_file" ;;
+        pre-feature-teardown)
+            printf '#   CODA_PROJECT_NAME, CODA_PROJECT_DIR, CODA_FEATURE_BRANCH, CODA_WORKTREE_DIR, CODA_SESSION_NAME\n' >> "$hook_file" ;;
         post-feature-finish)
             printf '#   CODA_PROJECT_NAME, CODA_FEATURE_BRANCH\n' >> "$hook_file" ;;
         post-layout-apply)

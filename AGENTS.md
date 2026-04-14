@@ -153,10 +153,45 @@ lib/
   watch.sh                  Session watcher (start/stop/status)
 hooks/                      Built-in lifecycle hook scripts (post-project-create, etc.)
 cmd/coda-core/              Go companion binary (layout snapshot, provider, watcher)
+mcp-server/                 MCP server exposing coda tools to OpenCode agents
 tests/                      Shell lifecycle regression tests (bash, mock tmux/fzf)
 test/                       Bats integration tests (module loading, functional)
 layouts/                    Built-in tmux layout scripts
 ```
+
+## MCP Server Contract
+
+`mcp-server/server.js` wraps the coda shell functions as structured MCP tools
+for OpenCode agents. It sources `shell-functions.sh` and invokes `coda` with
+the appropriate subcommands.
+
+When you change the contract of any coda subcommand (rename, add/remove
+arguments, change behavior), you must update the corresponding tool definition
+in the MCP server to match. The mapping is 1:1:
+
+| Shell command | MCP tool |
+|---|---|
+| `coda ls` | `coda_ls` |
+| `coda project ls` | `coda_project_ls` |
+| `coda project start --repo` | `coda_project_clone` |
+| `coda project start --new` | `coda_project_create` |
+| `coda project workon` | `coda_project_workon` |
+| `coda project close` | `coda_project_close` |
+| `coda feature ls` | `coda_feature_ls` |
+| `coda feature start` | `coda_feature_start` |
+| `coda feature done` | `coda_feature_done` |
+| `coda feature finish` | `coda_feature_finish` |
+| `coda watch status` | `coda_watch_status` |
+| `coda watch start` | `coda_watch_start` |
+| `coda watch stop` | `coda_watch_stop` |
+| `coda provider status` | `coda_provider_status` |
+| `coda layout ls` | `coda_layout_ls` |
+| `coda layout show` | `coda_layout_show` |
+| `coda help` | `coda_help` |
+
+If you add a new subcommand, add a matching MCP tool. If you remove one, remove
+the tool. The MCP server is registered in `~/.config/opencode/opencode.json`
+under the `mcp.coda` key.
 
 ## Rewrite Branch Guidance
 

@@ -66,36 +66,40 @@ function formatResult({ stdout, stderr, exitCode }) {
   return textResult(text || "(no output)");
 }
 
+const pluginTools = discoverPluginTools();
+
+function buildInstructions(pluginToolSection) {
+  const lines = [
+    "You are connected to the coda MCP server. ALWAYS prefer these tools over",
+    "shelling out to `coda`, `source shell-functions.sh`, or filesystem searches.",
+    "If the user references a focus card, feature, project, or session by name or",
+    "number, use the corresponding MCP tool — do not search the filesystem.",
+    "",
+    "Core tools:",
+    "  coda_ls — list active sessions",
+    "  coda_project_ls / coda_project_clone / coda_project_create / coda_project_workon / coda_project_close — manage projects",
+    "  coda_feature_ls / coda_feature_start / coda_feature_done / coda_feature_finish — manage feature branches",
+    "  coda_layout_ls / coda_layout_show — inspect layouts",
+    "  coda_help — CLI reference",
+  ];
+  if (pluginToolSection) {
+    lines.push(pluginToolSection);
+    if (pluginToolSection.includes("coda_focus_show")) {
+      lines.push(
+        "",
+        "When a user says 'focus card 26', 'feature 26', or 'focus 26', call coda_focus_show with ref='26'.",
+        "When they say 'start work on' a focus card, show it first to read the contract and context.",
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
 const server = new McpServer(
   { name: "coda", version: "1.0.0" },
   {
     capabilities: { logging: {} },
-    instructions: [
-      "You are connected to the coda MCP server. ALWAYS prefer these tools over",
-      "shelling out to `coda`, `source shell-functions.sh`, or filesystem searches.",
-      "If the user references a focus card, feature, project, or session by name or",
-      "number, use the corresponding MCP tool — do not search the filesystem.",
-      "",
-      "Core tools:",
-      "  coda_ls — list active sessions",
-      "  coda_project_ls / coda_project_clone / coda_project_create / coda_project_workon / coda_project_close — manage projects",
-      "  coda_feature_ls / coda_feature_start / coda_feature_done / coda_feature_finish — manage feature branches",
-      "  coda_layout_ls / coda_layout_show — inspect layouts",
-      "  coda_help — CLI reference",
-      "",
-      "Focus plugin tools (kanban cards):",
-      "  coda_focus_board — show the kanban board",
-      "  coda_focus_show — show a card by ID or slug (e.g. 'focus feature 26' → coda_focus_show with ref '26')",
-      "  coda_focus_new — create a card",
-      "  coda_focus_activate / coda_focus_done / coda_focus_park / coda_focus_kill — transition card status",
-      "  coda_focus_list — list cards by status or project",
-      "  coda_focus_wip — show WIP status",
-      "  coda_focus_edit — get card file path for editing",
-      "  coda_focus_intent — set/show session intent",
-      "",
-      "When a user says 'focus card 26', 'feature 26', or 'focus 26', call coda_focus_show with ref='26'.",
-      "When they say 'start work on' a focus card, show it first to read the contract and context.",
-    ].join("\n"),
+    instructions: buildInstructions(buildPluginInstructions(pluginTools)),
   }
 );
 
@@ -298,8 +302,9 @@ function buildHandler(command, params) {
   };
 }
 
-function loadPluginTools() {
-  const registeredTools = new Set();
+function discoverPluginTools() {
+  const tools = [];
+  const seen = new Set();
   const configPath = process.env.CODA_CONFIG_PATH
     || path.join(process.env.HOME, ".config", "coda", "config.json");
   const pluginsDir = process.env.CODA_PLUGINS_DIR
@@ -309,11 +314,11 @@ function loadPluginTools() {
   try {
     config = JSON.parse(fs.readFileSync(configPath, "utf8"));
   } catch {
-    return;
+    return tools;
   }
 
   const plugins = config.plugins;
-  if (!plugins || typeof plugins !== "object") return;
+  if (!plugins || typeof plugins !== "object") return tools;
 
   for (const [url, entry] of Object.entries(plugins)) {
     if (entry.enabled === false) continue;
@@ -337,19 +342,42 @@ function loadPluginTools() {
         console.error(`Plugin ${name}: skipping tool ${toolName} (invalid command)`);
         continue;
       }
-      if (registeredTools.has(toolName)) {
+      if (seen.has(toolName)) {
         console.error(`Plugin ${name}: skipping duplicate tool ${toolName}`);
         continue;
       }
-      const schema = buildZodSchema(toolDef.params);
-      const handler = buildHandler(toolDef.command, toolDef.params);
-      server.tool(toolName, toolDef.description || toolName, schema, handler);
-      registeredTools.add(toolName);
+      seen.add(toolName);
+      tools.push({ pluginName: name, toolName, toolDef });
     }
+  }
+  return tools;
+}
+
+function registerPluginTools(pluginTools) {
+  for (const { pluginName, toolName, toolDef } of pluginTools) {
+    const schema = buildZodSchema(toolDef.params);
+    const handler = buildHandler(toolDef.command, toolDef.params);
+    server.tool(toolName, toolDef.description || toolName, schema, handler);
   }
 }
 
-loadPluginTools();
+function buildPluginInstructions(pluginTools) {
+  if (pluginTools.length === 0) return "";
+
+  const byPlugin = new Map();
+  for (const { pluginName, toolName, toolDef } of pluginTools) {
+    if (!byPlugin.has(pluginName)) byPlugin.set(pluginName, []);
+    byPlugin.get(pluginName).push(`  ${toolName} — ${toolDef.description || toolName}`);
+  }
+
+  const sections = [];
+  for (const [name, lines] of byPlugin) {
+    sections.push(`Plugin tools (${name}):\n${lines.join("\n")}`);
+  }
+  return "\n" + sections.join("\n\n");
+}
+
+registerPluginTools(pluginTools);
 
 // ── Start ───────────────────────────────────────────────────────────
 

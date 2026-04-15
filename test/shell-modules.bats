@@ -829,9 +829,9 @@ setup() {
     [ -z "$NEW_PROJECT_GITHUB_OWNER" ] || [ "$NEW_PROJECT_GITHUB_OWNER" != "evanstern" ]
 }
 
-@test "_coda_project_start_new errors when owner unset and gh unavailable" {
+@test "_coda_project_start_new errors when owner unset and gh fails" {
     unset NEW_PROJECT_GITHUB_OWNER
-    # Hide gh so auto-detection can't work
+    # Override gh so auto-detection fails (command -v still finds the function)
     gh() { return 1; }
     export -f gh
     run _coda_project_start_new "test-repo"
@@ -841,7 +841,7 @@ setup() {
     unset -f gh
 }
 
-@test "_coda_project_start_new error suggests gh api user when gh missing" {
+@test "_coda_project_start_new error suggests gh api user when gh returns error" {
     unset NEW_PROJECT_GITHUB_OWNER
     # Create a temp dir with a fake gh that always fails
     local fake_bin="$BATS_TEST_TMPDIR/fake_bin"

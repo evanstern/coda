@@ -829,6 +829,35 @@ setup() {
     [ -z "$NEW_PROJECT_GITHUB_OWNER" ] || [ "$NEW_PROJECT_GITHUB_OWNER" != "evanstern" ]
 }
 
+@test "_coda_project_start_new errors when owner unset and gh fails" {
+    unset NEW_PROJECT_GITHUB_OWNER
+    # Override gh so auto-detection fails (command -v still finds the function)
+    gh() { return 1; }
+    export -f gh
+    run _coda_project_start_new "test-repo"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"NEW_PROJECT_GITHUB_OWNER is not set"* ]]
+    [[ "$output" == *"gh api user --jq"* ]]
+    unset -f gh
+}
+
+@test "_coda_project_start_new error suggests gh api user when gh returns error" {
+    unset NEW_PROJECT_GITHUB_OWNER
+    # Create a temp dir with a fake gh that always fails
+    local fake_bin="$BATS_TEST_TMPDIR/fake_bin"
+    mkdir -p "$fake_bin"
+    printf '#!/bin/sh\nexit 1\n' > "$fake_bin/gh"
+    chmod +x "$fake_bin/gh"
+    run env -i HOME="$HOME" PATH="$fake_bin:/usr/bin:/bin" bash -c '
+        export AUTO_ATTACH_TMUX=false SSH_CONNECTION="" CODA_SKIP_ENV=true
+        source "'"$SCRIPT_DIR"'/shell-functions.sh"
+        unset NEW_PROJECT_GITHUB_OWNER
+        _coda_project_start_new test-repo
+    '
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"gh api user --jq"* ]]
+}
+
 @test "watcher session derives from SESSION_PREFIX" {
     local old_prefix="$SESSION_PREFIX"
     SESSION_PREFIX="test-prefix-"

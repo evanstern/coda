@@ -94,7 +94,6 @@ _coda_project_start_new() {
     local name="$1"
     local message="$2"
     local project_dir="$PROJECTS_DIR/$name"
-    local repo_url="git@github.com:${NEW_PROJECT_GITHUB_OWNER}/${name}.git"
     local branch="$DEFAULT_BRANCH"
     local worktree_dir="$project_dir/$branch"
 
@@ -104,10 +103,20 @@ _coda_project_start_new() {
     fi
 
     if [ -z "$NEW_PROJECT_GITHUB_OWNER" ]; then
-        echo "NEW_PROJECT_GITHUB_OWNER is not set."
-        echo "Add it to your .env: NEW_PROJECT_GITHUB_OWNER=yourgithubuser"
-        return 1
+        if command -v gh &>/dev/null; then
+            NEW_PROJECT_GITHUB_OWNER=$(gh api user --jq '.login' 2>/dev/null) || true
+        fi
+        if [ -n "$NEW_PROJECT_GITHUB_OWNER" ]; then
+            echo "Auto-detected GitHub owner: $NEW_PROJECT_GITHUB_OWNER"
+        else
+            echo "NEW_PROJECT_GITHUB_OWNER is not set."
+            echo "Add it to your .env: NEW_PROJECT_GITHUB_OWNER=yourgithubuser"
+            echo "Tip: run 'gh api user --jq .login' to find your GitHub username."
+            return 1
+        fi
     fi
+
+    local repo_url="git@github.com:${NEW_PROJECT_GITHUB_OWNER}/${name}.git"
 
     if ! command -v gh &>/dev/null; then
         echo "GitHub CLI (gh) is required for --new."

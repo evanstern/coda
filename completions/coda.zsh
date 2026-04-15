@@ -48,6 +48,22 @@ _coda_layouts() {
     _coda_list_layouts 2>/dev/null
 }
 
+_coda_plugin_complete_args() {
+    local cmd="$1"
+    (( ${#_CODA_PLUGIN_COMMANDS} )) 2>/dev/null || return 0
+    local entry="${_CODA_PLUGIN_COMMANDS[$cmd]:-}"
+    [[ -n "$entry" ]] || return 0
+    local plugin_dir="${entry##*:}"
+    local manifest="$plugin_dir/plugin.json"
+    [[ -f "$manifest" ]] || return 0
+    local subs
+    subs=$(jq -r --arg c "$cmd" '.provides.completions[$c].subcommands // empty' "$manifest" 2>/dev/null)
+    [[ -n "$subs" ]] || return 0
+    local -a subcmds
+    subcmds=(${=subs})
+    _describe "$cmd subcommand" subcmds
+}
+
 _coda() {
     local state line
     typeset -A opt_args
@@ -85,6 +101,12 @@ _coda() {
             for s in $sessions; do
                 all_completions+=("$s:attach to session coda-$s")
             done
+            # Add plugin commands
+            if (( ${#_CODA_PLUGIN_COMMANDS} )) 2>/dev/null; then
+                for cmd in ${(k)_CODA_PLUGIN_COMMANDS}; do
+                    all_completions+=("$cmd:plugin command")
+                done
+            fi
             _describe 'subcommand' all_completions
             ;;
 
@@ -126,6 +148,9 @@ _coda() {
                     local -a ports
                     for i in {0..9}; do ports+=($((base + i))); done
                     _describe 'port' ports
+                    ;;
+                *)
+                    _coda_plugin_complete_args "$line[1]"
                     ;;
             esac
             ;;

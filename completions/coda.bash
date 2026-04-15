@@ -61,6 +61,23 @@ _coda_providers() {
     _coda_list_providers 2>/dev/null
 }
 
+_coda_plugin_command_names() {
+    [[ ${#_CODA_PLUGIN_COMMANDS[@]} -gt 0 ]] 2>/dev/null || return 0
+    printf '%s\n' "${!_CODA_PLUGIN_COMMANDS[@]}"
+}
+
+_coda_plugin_subcommands() {
+    local cmd="$1"
+    [[ ${#_CODA_PLUGIN_COMMANDS[@]} -gt 0 ]] 2>/dev/null || return 0
+    local entry="${_CODA_PLUGIN_COMMANDS[$cmd]:-}"
+    [[ -n "$entry" ]] || return 0
+    local plugin_dir
+    plugin_dir="${entry##*:}"
+    local manifest="$plugin_dir/plugin.json"
+    [[ -f "$manifest" ]] || return 0
+    jq -r --arg c "$cmd" '.provides.completions[$c].subcommands // empty' "$manifest" 2>/dev/null
+}
+
 _coda_complete() {
     local cur prev words cword
     _init_completion 2>/dev/null || {
@@ -72,6 +89,12 @@ _coda_complete() {
     }
 
     local top_subcommands="attach ls switch serve auth project feature layout profile hooks watch provider github plugin help"
+
+    local plugin_cmd_names
+    plugin_cmd_names=$(_coda_plugin_command_names 2>/dev/null)
+    if [[ -n "$plugin_cmd_names" ]]; then
+        top_subcommands="$top_subcommands $plugin_cmd_names"
+    fi
 
     # Word positions:
     #   words[0] = coda
@@ -164,7 +187,13 @@ _coda_complete() {
                     COMPREPLY=($(compgen -W "$ports" -- "$cur"))
                     ;;
                 *)
-                    COMPREPLY=()
+                    local plugin_subs
+                    plugin_subs=$(_coda_plugin_subcommands "${words[1]}" 2>/dev/null)
+                    if [[ -n "$plugin_subs" ]]; then
+                        COMPREPLY=($(compgen -W "$plugin_subs" -- "$cur"))
+                    else
+                        COMPREPLY=()
+                    fi
                     ;;
             esac
             ;;

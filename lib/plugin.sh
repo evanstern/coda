@@ -141,6 +141,24 @@ _coda_plugin_load_all() {
     done <<< "$urls"
 }
 
+_coda_plugin_find_dep() {
+    local dep="$1"
+    command -v "$dep" &>/dev/null && return 0
+    # Check well-known install locations not always on PATH;
+    # prepend the directory so callers can invoke the dep by name.
+    local dir
+    for dir in "$HOME/.opencode/bin" "$HOME/.local/bin"; do
+        if [ -x "$dir/$dep" ]; then
+            case ":${PATH:-}:" in
+                *":$dir:"*) ;;
+                *) export PATH="$dir${PATH:+:$PATH}" ;;
+            esac
+            return 0
+        fi
+    done
+    return 1
+}
+
 _coda_plugin_load() {
     local name="$1" dir="$2"
 
@@ -150,7 +168,7 @@ _coda_plugin_load() {
     local coda_constraint
     coda_constraint=$(jq -r '.coda // empty' "$manifest" 2>/dev/null)
     if [ -n "$coda_constraint" ] && ! _coda_semver_satisfies "${CODA_VERSION:-0.0.0}" "$coda_constraint"; then
-        echo "warning: plugin '$name' requires coda $coda_constraint (have ${CODA_VERSION:-0.0.0}), skipping" >&2
+        [ -n "${CODA_DEBUG:-}" ] && echo "debug: plugin '$name' requires coda $coda_constraint (have ${CODA_VERSION:-0.0.0}), skipping" >&2
         return 0
     fi
 
@@ -158,8 +176,8 @@ _coda_plugin_load() {
     sys_deps=$(jq -r '.dependencies.system // [] | .[]' "$manifest" 2>/dev/null)
     while IFS= read -r dep; do
         [ -z "$dep" ] && continue
-        if ! command -v "$dep" &>/dev/null; then
-            echo "warning: plugin '$name' requires '$dep' which is not installed, skipping" >&2
+        if ! _coda_plugin_find_dep "$dep"; then
+            [ -n "${CODA_DEBUG:-}" ] && echo "debug: plugin '$name' requires '$dep' which is not installed, skipping" >&2
             return 0
         fi
     done <<< "$sys_deps"
@@ -381,7 +399,7 @@ _coda_plugin_install_deps() {
     sys_deps=$(jq -r '.dependencies.system // [] | .[]' "$manifest" 2>/dev/null)
     while IFS= read -r dep; do
         [ -z "$dep" ] && continue
-        if command -v "$dep" &>/dev/null; then
+        if _coda_plugin_find_dep "$dep"; then
             echo "  $dep: found"
         else
             echo "  $dep: MISSING"

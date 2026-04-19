@@ -7,7 +7,7 @@ in parallel across isolated git worktrees, accessible from anywhere via Tailscal
 
 You provision a VM (on Proxmox, or any Ubuntu host), run `./install.sh`, and get:
 
-- **Multiple parallel OpenCode sessions** — each in its own tmux window, each in its own git worktree, each on its own branch. No conflicts, no stepping on each other.
+- **Multiple parallel OpenCode sessions** — each in its own tmux session, each in its own git worktree, each on its own branch. No conflicts, no stepping on each other.
 - **Access from anywhere** — Tailscale gives the VM a stable IP from any network. mosh survives WiFi drops, cellular handoffs, and laptop sleep. tmux sessions persist regardless of connection state.
 - **Fire-and-forget mode** — `opencode serve` exposes an HTTP API. Submit tasks from scripts, cron jobs, or your phone, and check results when you're back.
 - **`coda`** — a unified CLI that wraps all session, project, and feature management into one command with tab completion and a man page.
@@ -41,50 +41,79 @@ A sibling command `coda-dev` is also available. It behaves identically to `coda`
 
 ## Installation
 
-On a fresh Ubuntu Server 24.04 VM, clone this repo and run:
+Installation is a two-step flow on a fresh VM: system bootstrap, then coda
+wiring. Both scripts are idempotent — safe to re-run at any time.
+
+### 1. System bootstrap (`setup-vm.sh`)
+
+Installs the underlying system dependencies. Run once on a fresh VM.
 
 ```bash
 git clone <this-repo-url> ~/coda
 cd ~/coda
+chmod +x setup-vm.sh
+./setup-vm.sh
+```
+
+| Step | What it does |
+|------|-------------|
+| 1 | apt packages: git, tmux, mosh, curl, build-essential, jq, lsof, etc. |
+| 2 | Core CLI tools |
+| 3 | Neovim (from GitHub releases, >= `NVIM_MIN_VERSION`) |
+| 4 | Node.js via NodeSource (`NODE_MAJOR_VERSION`, default 20) |
+| 5 | fzf (fuzzy finder, binary install) |
+| 6 | tmux Plugin Manager (TPM) |
+| 7 | Base project directories |
+
+`setup-vm.sh` explicitly does **not** install Tailscale, OpenCode, or Claude
+Code — those have their own install paths documented below.
+
+### 2. Coda wiring (`install.sh`)
+
+Installs coda itself: the Go helper binary, MCP server, shell functions,
+completions, man page, and config directories.
+
+```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-`install.sh` is fully idempotent — safe to re-run at any time. It installs and
-configures everything in one pass:
-
 | Step | What it does |
 |------|-------------|
-| 1 | System packages: git, tmux, mosh, curl, build-essential, jq, lsof, etc. |
-| 2 | Neovim (latest release from GitHub, upgrades if installed version is too old) |
-| 3 | Node.js via NodeSource (version-aware, won't skip on outdated installs) |
-| 4 | OpenCode via `npm install -g opencode-ai@latest` |
-| 5 | Claude Code CLI via `npm install -g @anthropic-ai/claude-code` |
-| 6 | fzf (fuzzy finder, binary install) |
-| 7 | yazi (terminal file manager, used by four-pane layout) |
-| 8 | lazygit (terminal git UI, used by four-pane layout) |
-| 9 | Oh My Posh prompt theme engine (user install to `~/.local/bin`) |
-| 10 | tmux Plugin Manager (TPM) |
-| 11 | Tailscale |
-| 12 | Config files, tab completions, man page, Oh My Posh shell init, SSH keepalive, tmux plugins |
+| 1 | Builds the `cmd/coda-core/` Go helper binary |
+| 2 | Installs the shared MCP server (`mcp-server/`) |
+| 3 | Wires shell functions and tab completions into `~/.bashrc` / `~/.zshrc` |
+| 4 | Installs the `man coda` page |
+| 5 | Creates config directories under `~/.config/coda/` |
 
-To skip optional components:
+Available flags (also settable via `.env` or environment variables):
 
 ```bash
-SKIP_TAILSCALE=true ./install.sh
-SKIP_OPENCODE=true  ./install.sh
-SKIP_CLAUDE=true    ./install.sh
-SKIP_OHMYPOSH=true  ./install.sh
-SKIP_YAZI=true      ./install.sh
-SKIP_LAZYGIT=true   ./install.sh
+./install.sh --skip-go       # don't build the coda-core Go binary
+./install.sh --skip-mcp      # don't set up the MCP server
+./install.sh --skip-man      # don't install the man page
+./install.sh --projects-dir ~/work  # override default ~/projects
+./install.sh --help
 ```
+
+### 3. Optional external tools
+
+These are not installed by either script; install them separately when you
+need them:
+
+- **Tailscale** — `curl -fsSL https://tailscale.com/install.sh | sh`
+- **OpenCode** — `npm install -g opencode-ai@latest`
+  (or see https://opencode.ai for current install instructions)
+- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
+- **yazi** / **lazygit** — required only if you use the `four-pane` layout
+- **Oh My Posh** — optional prompt theme
 
 ### After install
 
 Reload your shell first, then choose one provider path.
 
 ```bash
-sudo tailscale up          # connect to your Tailscale network
+sudo tailscale up          # if Tailscale is installed, connect to your tailnet
 source ~/.bashrc           # pick up coda + completions
 tmux                       # start your first session
 ```

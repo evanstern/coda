@@ -406,7 +406,11 @@ function startHttp() {
 
       if (sessionId && transports.has(sessionId)) {
         await transports.get(sessionId).handleRequest(req, res, body);
-      } else if (!sessionId && isInitializeRequest(body)) {
+      } else if (sessionId && !transports.has(sessionId)) {
+        // Stale session — tell the client to re-initialize
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Session not found" }));
+      } else if (isInitializeRequest(body)) {
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => transports.set(sid, transport),

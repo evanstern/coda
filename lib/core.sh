@@ -110,9 +110,22 @@ _coda_attach() {
     nvim_appname=$(printf '%s' "$config_lines" | sed -n '2p')
 
     if [ "$window_mode" = true ]; then
-        local window_name="${session#${SESSION_PREFIX}}"
-        window_name="${window_name#*--}"
-        [ -n "$window_name" ] || window_name="${session#${SESSION_PREFIX}}"
+        local window_name=""
+        if [ -n "$project_root" ]; then
+            local sanitized_project project_window_prefix
+            sanitized_project=$(_coda_sanitize_session_name "$(basename "$project_root")")
+            project_window_prefix="${SESSION_PREFIX}${sanitized_project}--"
+            case "$session" in
+                "${project_window_prefix}"*)
+                    window_name="${session#${project_window_prefix}}"
+                    ;;
+            esac
+        fi
+        if [ -z "$window_name" ]; then
+            window_name="${session#${SESSION_PREFIX}}"
+            window_name="${window_name#*--}"
+            [ -n "$window_name" ] || window_name="${session#${SESSION_PREFIX}}"
+        fi
 
         _coda_load_layout "$layout" || return 1
 
@@ -138,9 +151,11 @@ _coda_attach() {
 
         tmux set-environment -t "$orch_target" CODA_DIR "$dir"
 
-        CODA_SESSION_NAME="$window_target" \
-        CODA_SESSION_DIR="$dir" CODA_SESSION_LAYOUT="$layout" \
-            _coda_run_hooks post-session-create
+        if [ "$window_exists" = false ]; then
+            CODA_SESSION_NAME="$window_target" \
+            CODA_SESSION_DIR="$dir" CODA_SESSION_LAYOUT="$layout" \
+                _coda_run_hooks post-session-create
+        fi
 
         if [ -n "${TMUX:-}" ]; then
             if tmux list-windows -t "$orch_target" -F '#{session_name}:#{window_name}' 2>/dev/null \

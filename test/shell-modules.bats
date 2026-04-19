@@ -1318,10 +1318,11 @@ _coda95_stub_git() {
 }
 
 @test "card95: _coda_attach window-mode skips spawn when window already exists" {
-    local spawn_called=0
+    local spawn_called=0 hook_log
+    hook_log=$(mktemp)
     _layout_spawn() { spawn_called=$((spawn_called+1)); return 0; }
     _coda_load_layout() { return 0; }
-    _coda_run_hooks() { return 0; }
+    _coda_run_hooks() { echo "$1" >>"$hook_log"; return 0; }
     tmux() {
         case "$1" in
             has-session) return 0 ;;
@@ -1333,7 +1334,60 @@ _coda95_stub_git() {
     TMUX=fake CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="${SESSION_PREFIX}orch--riley" \
         _coda_attach myproj--foo /tmp >/dev/null 2>&1
     [ "$spawn_called" -eq 0 ]
+    ! grep -Fxq "post-session-create" "$hook_log"
+    grep -Fxq "post-session-attach" "$hook_log"
+    rm -f "$hook_log"
     unset -f _layout_spawn _coda_load_layout _coda_run_hooks tmux
+    unset TMUX CODA_ORCH_WINDOW_MODE CODA_ORCH_TARGET
+}
+
+@test "card95: _coda_attach window-mode fires post-session-create only on new window" {
+    local hook_log
+    hook_log=$(mktemp)
+    local state_file
+    state_file=$(mktemp)
+    _layout_spawn() { echo spawned >>"$state_file"; return 0; }
+    _coda_load_layout() { return 0; }
+    _coda_run_hooks() { echo "$1" >>"$hook_log"; return 0; }
+    tmux() {
+        case "$1" in
+            has-session) return 0 ;;
+            list-windows)
+                if [ -s "$state_file" ]; then
+                    echo "${SESSION_PREFIX}orch--riley:foo"
+                fi
+                return 0 ;;
+            set-environment|switch-client|attach) return 0 ;;
+            *) return 0 ;;
+        esac
+    }
+    TMUX=fake CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="${SESSION_PREFIX}orch--riley" \
+        _coda_attach myproj--foo /tmp >/dev/null 2>&1
+    grep -Fxq "post-session-create" "$hook_log"
+    grep -Fxq "post-session-attach" "$hook_log"
+    rm -f "$hook_log" "$state_file"
+    unset -f _layout_spawn _coda_load_layout _coda_run_hooks tmux
+    unset TMUX CODA_ORCH_WINDOW_MODE CODA_ORCH_TARGET
+}
+
+@test "card95: _coda_attach derives correct window name when project contains --" {
+    local spawn_target=""
+    _layout_spawn() { spawn_target="${CODA_LAYOUT_TARGET:-}"; return 0; }
+    _coda_load_layout() { return 0; }
+    _coda_run_hooks() { return 0; }
+    _coda_find_project_root_from() { echo "/tmp/my--proj"; }
+    tmux() {
+        case "$1" in
+            has-session) return 0 ;;
+            list-windows) return 0 ;;
+            set-environment|switch-client|attach) return 0 ;;
+            *) return 0 ;;
+        esac
+    }
+    TMUX=fake CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="${SESSION_PREFIX}orch--riley" \
+        _coda_attach "my--proj--auth" /tmp >/dev/null 2>&1
+    [ "$spawn_target" = "${SESSION_PREFIX}orch--riley:auth" ]
+    unset -f _layout_spawn _coda_load_layout _coda_run_hooks _coda_find_project_root_from tmux
     unset TMUX CODA_ORCH_WINDOW_MODE CODA_ORCH_TARGET
 }
 

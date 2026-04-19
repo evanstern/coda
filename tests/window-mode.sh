@@ -40,7 +40,7 @@ printf 'Running window-mode tests...\n'
 
 # -- Setup project --
 
-coda project start --repo "$REMOTE_REPO" window-test 2>&1 >/dev/null
+coda project start --repo "$REMOTE_REPO" window-test >/dev/null 2>&1
 cd "$PROJECTS_DIR/window-test/main"
 
 # -- Test 1: --orch flag with missing orch session falls back to session-mode --

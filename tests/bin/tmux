@@ -6,9 +6,10 @@ state_dir="${CODA_TEST_STATE_DIR:?CODA_TEST_STATE_DIR is required}"
 sessions_file="$state_dir/tmux-sessions"
 actions_file="$state_dir/tmux-actions"
 env_file="$state_dir/tmux-env"
+windows_file="$state_dir/tmux-windows"
 
 mkdir -p "$state_dir"
-touch "$sessions_file" "$actions_file" "$env_file"
+touch "$sessions_file" "$actions_file" "$env_file" "$windows_file"
 
 log_action() {
     printf '%s\n' "$*" >> "$actions_file"
@@ -87,10 +88,15 @@ case "$command_name" in
         ;;
     new-window)
         local_session=""
+        local_window_name=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 -t)
                     local_session="$2"
+                    shift 2
+                    ;;
+                -n)
+                    local_window_name="$2"
                     shift 2
                     ;;
                 *)
@@ -100,7 +106,31 @@ case "$command_name" in
         done
         [ -n "$local_session" ] || exit 1
         add_session "$local_session"
+        # Track window: "session:window_name"
+        if [ -n "$local_window_name" ]; then
+            printf '%s:%s\n' "$local_session" "$local_window_name" >> "$windows_file"
+        fi
         log_action "new-window:$local_session"
+        ;;
+    kill-window)
+        local_target=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -t)
+                    local_target="$2"
+                    shift 2
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+        [ -n "$local_target" ] || exit 1
+        # Remove from windows file
+        local_tmp=$(mktemp)
+        grep -Fvx -- "$local_target" "$windows_file" > "$local_tmp" || true
+        mv "$local_tmp" "$windows_file"
+        log_action "kill-window:$local_target"
         ;;
     set-environment)
         [ "$1" = "-t" ] || exit 1
@@ -122,6 +152,30 @@ case "$command_name" in
         ;;
     list-sessions)
         list_sessions "$@"
+        ;;
+    list-windows)
+        local_target=""
+        local_format=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -t) local_target="$2"; shift 2 ;;
+                -F) local_format="$2"; shift 2 ;;
+                *)  shift ;;
+            esac
+        done
+        [ -n "$local_target" ] || exit 1
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            case "$line" in
+                "$local_target":*)
+                    if [ "$local_format" = '#{session_name}:#{window_name}' ]; then
+                        printf '%s\n' "$line"
+                    else
+                        printf '%s\n' "${line#*:}"
+                    fi
+                    ;;
+            esac
+        done < "$windows_file"
         ;;
     set-option|select-pane|split-window|display-message|capture-pane)
         log_action "$command_name:$*"

@@ -125,12 +125,80 @@ _coda_feature_start() {
     fi
 }
 
+# Locate a feature's tmux target across all known orch sessions.
+#
+# Args:
+#   $1 - branch name (the window name to search for)
+#   $2 - explicit orch override (may be empty)
+#
+# Prints:
+#   "<orch-session>:<window>" when exactly one match OR --orch override used
+#   "" when no match (caller falls back to legacy session path)
+#
+# Exits nonzero when multiple orchs contain a window with this branch
+# name AND no explicit orch given.
+_coda_feature_locate_window() {
+    local branch="$1"
+    local orch_name="${2:-}"
+
+    if [ -n "$orch_name" ]; then
+        local orch_target
+        orch_target="${SESSION_PREFIX}orch--$(_coda_sanitize_session_name "$orch_name")"
+        if tmux list-windows -t "$orch_target" -F '#{window_name}' 2>/dev/null \
+                | grep -Fxq -- "$branch"; then
+            echo "${orch_target}:${branch}"
+            return 0
+        fi
+        return 0
+    fi
+
+    # Probe: scan every coda-orch--* session for a window named $branch.
+    local matches=()
+    local sess
+    while IFS= read -r sess; do
+        [ -n "$sess" ] || continue
+        if tmux list-windows -t "$sess" -F '#{window_name}' 2>/dev/null \
+                | grep -Fxq -- "$branch"; then
+            matches+=("${sess}:${branch}")
+        fi
+    done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null \
+                 | grep "^${SESSION_PREFIX}orch--" || true)
+
+    case ${#matches[@]} in
+        0) echo "" ;;
+        1) echo "${matches[0]}" ;;
+        *)
+            echo "Multiple orchestrator sessions contain a window named '$branch':" >&2
+            printf '  %s\n' "${matches[@]}" >&2
+            echo "" >&2
+            echo "Disambiguate with: coda feature done $branch --orch <name>" >&2
+            return 1
+            ;;
+    esac
+}
+
 _coda_feature_done() {
-    local branch="${1:-}"
-    local project_name="${2:-}"
+    local branch="" project_name="" orch_name=""
+    local positional=()
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --orch)
+                if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+                    echo "Usage: coda feature done <branch> [project-name] [--orch <name>]"
+                    return 1
+                fi
+                orch_name="$2"; shift 2 ;;
+            --orch=*) orch_name="${1#--orch=}"; shift ;;
+            *)        positional+=("$1"); shift ;;
+        esac
+    done
+
+    branch="${positional[0]:-}"
+    project_name="${positional[1]:-}"
 
     if [ -z "$branch" ]; then
-        echo "Usage: coda feature done <branch> [project-name]"
+        echo "Usage: coda feature done <branch> [project-name] [--orch <name>]"
         return 1
     fi
 
@@ -154,14 +222,28 @@ _coda_feature_done() {
     local session="${SESSION_PREFIX}$(_coda_sanitize_session_name "$project_name")--${branch}"
     local worktree_dir="$project_root/$branch"
 
+    # Probe for window-mode target before hooks so hooks see the right
+    # session name. Multi-match errors surface here.
+    local window_target
+    window_target=$(_coda_feature_locate_window "$branch" "$orch_name") || return 1
+
+    local hook_session_name="$session"
+    [ -n "$window_target" ] && hook_session_name="$window_target"
+
     echo "Cleaning up feature: $branch"
 
     CODA_PROJECT_NAME="$project_name" CODA_PROJECT_DIR="$project_root" \
     CODA_FEATURE_BRANCH="$branch" CODA_WORKTREE_DIR="$worktree_dir" \
-    CODA_SESSION_NAME="$session" \
+    CODA_SESSION_NAME="$hook_session_name" \
         _coda_run_hooks pre-feature-teardown
 
-    if tmux has-session -t "$session" 2>/dev/null; then
+    # Try window-mode first. If a window matches (either via --orch
+    # override or via probe), kill the window; leave the orch session
+    # untouched. Otherwise, fall back to legacy session teardown.
+    if [ -n "$window_target" ]; then
+        echo "  Killing window: $window_target"
+        tmux kill-window -t "$window_target"
+    elif tmux has-session -t "$session" 2>/dev/null; then
         echo "  Killing session: $session"
         tmux kill-session -t "$session"
     fi
@@ -185,10 +267,19 @@ _coda_feature_done() {
 
 _coda_feature_finish() {
     local force=false
+    local orch_name=""
+
     while [ $# -gt 0 ]; do
         case "$1" in
             --force|-f) force=true; shift ;;
-            *) echo "Usage: coda feature finish [--force]"; return 1 ;;
+            --orch)
+                if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+                    echo "Usage: coda feature finish [--force] [--orch <name>]"
+                    return 1
+                fi
+                orch_name="$2"; shift 2 ;;
+            --orch=*) orch_name="${1#--orch=}"; shift ;;
+            *) echo "Usage: coda feature finish [--force] [--orch <name>]"; return 1 ;;
         esac
     done
 
@@ -239,11 +330,18 @@ _coda_feature_finish() {
     local session="${SESSION_PREFIX}$(_coda_sanitize_session_name "$project_name")--${branch}"
     local worktree_dir="$project_root/$branch"
 
+    # Compute window target OUTSIDE the backgrounded subshell so any
+    # multi-match error surfaces to the user before teardown starts.
+    local window_target
+    window_target=$(_coda_feature_locate_window "$branch" "$orch_name") || return 1
+
     echo "Finishing feature: $branch"
 
     (
         sleep 1
-        if tmux has-session -t "$session" 2>/dev/null; then
+        if [ -n "$window_target" ]; then
+            tmux kill-window -t "$window_target" 2>/dev/null
+        elif tmux has-session -t "$session" 2>/dev/null; then
             tmux kill-session -t "$session"
         fi
         if [ -d "$worktree_dir" ]; then

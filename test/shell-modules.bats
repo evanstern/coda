@@ -1476,3 +1476,350 @@ _coda95_stub_git() {
     unset -f tmux
     rm -f "$cmd_log"
 }
+
+# --- Card #96: window-aware teardown for feature done/finish ---
+
+_coda96_setup_fake_project() {
+    local project_name="$1"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    export PROJECTS_DIR="$tmpdir"
+    local root="$tmpdir/$project_name"
+    mkdir -p "$root/.bare" "$root/main"
+    printf 'gitdir: ./.bare\n' > "$root/.git"
+    echo "$root"
+}
+
+_coda96_stub_git() {
+    git() {
+        local args=("$@")
+        for ((i=0; i<${#args[@]}; i++)); do
+            case "${args[i]}" in
+                show-ref) return 0 ;;
+                fetch|worktree) return 0 ;;
+                rev-parse) echo main; return 0 ;;
+                branch) return 0 ;;
+            esac
+        done
+        return 0
+    }
+    _coda_detect_default_branch() { echo main; }
+}
+
+@test "card96: _coda_feature_locate_window with no orch sessions returns empty" {
+    tmux() {
+        case "$1" in
+            list-sessions) return 0 ;;
+            list-windows) return 0 ;;
+        esac
+        return 0
+    }
+    local result
+    result=$(_coda_feature_locate_window "my-branch" "")
+    [ -z "$result" ]
+    unset -f tmux
+}
+
+@test "card96: _coda_feature_locate_window with one orch, window matches" {
+    tmux() {
+        case "$1" in
+            list-sessions) echo "${SESSION_PREFIX}orch--riley"; return 0 ;;
+            list-windows) echo "feat-x"; return 0 ;;
+        esac
+        return 0
+    }
+    local result
+    result=$(_coda_feature_locate_window "feat-x" "")
+    [ "$result" = "${SESSION_PREFIX}orch--riley:feat-x" ]
+    unset -f tmux
+}
+
+@test "card96: _coda_feature_locate_window with one orch, no matching window" {
+    tmux() {
+        case "$1" in
+            list-sessions) echo "${SESSION_PREFIX}orch--riley"; return 0 ;;
+            list-windows) echo "other-branch"; return 0 ;;
+        esac
+        return 0
+    }
+    local result
+    result=$(_coda_feature_locate_window "feat-x" "")
+    [ -z "$result" ]
+    unset -f tmux
+}
+
+@test "card96: _coda_feature_locate_window with explicit --orch, window matches" {
+    tmux() {
+        case "$1" in
+            list-windows) echo "feat-x"; return 0 ;;
+        esac
+        return 0
+    }
+    local result
+    result=$(_coda_feature_locate_window "feat-x" "riley")
+    [ "$result" = "${SESSION_PREFIX}orch--riley:feat-x" ]
+    unset -f tmux
+}
+
+@test "card96: _coda_feature_locate_window with explicit --orch, no matching window" {
+    tmux() {
+        case "$1" in
+            list-windows) return 0 ;;
+        esac
+        return 0
+    }
+    local result
+    result=$(_coda_feature_locate_window "feat-x" "riley")
+    [ -z "$result" ]
+    unset -f tmux
+}
+
+@test "card96: _coda_feature_locate_window with two orchs both having window exits 1" {
+    tmux() {
+        case "$1" in
+            list-sessions) printf '%s\n' "${SESSION_PREFIX}orch--alpha" "${SESSION_PREFIX}orch--beta"; return 0 ;;
+            list-windows) echo "feat-x"; return 0 ;;
+        esac
+        return 0
+    }
+    run _coda_feature_locate_window "feat-x" ""
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Multiple orchestrator sessions"* ]]
+    [[ "$output" == *"Disambiguate with"* ]]
+    unset -f tmux
+}
+
+@test "card96: _coda_feature_done parses --orch <name> (space form)" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_run_hooks() { return 0; }
+    _coda_prune_sessions_for_dir() { return 0; }
+    _coda96_stub_git
+    local proj_dir
+    proj_dir=$(_coda96_setup_fake_project widget96a)
+    cd "$proj_dir/main"
+    # Set up mock tmux: orch session with window
+    tmux() {
+        case "$1" in
+            list-sessions) echo "${SESSION_PREFIX}orch--riley"; return 0 ;;
+            list-windows) echo "feat-a"; return 0 ;;
+            has-session) return 1 ;;
+            kill-window) echo "$3" > "$capture_file"; return 0 ;;
+        esac
+        return 0
+    }
+    _coda_feature_done feat-a --orch riley >/dev/null 2>&1
+    local killed
+    killed=$(cat "$capture_file")
+    [ "$killed" = "${SESSION_PREFIX}orch--riley:feat-a" ]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_run_hooks _coda_prune_sessions_for_dir tmux git _coda_detect_default_branch
+}
+
+@test "card96: _coda_feature_done parses --orch=<name> (equals form)" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_run_hooks() { return 0; }
+    _coda_prune_sessions_for_dir() { return 0; }
+    _coda96_stub_git
+    local proj_dir
+    proj_dir=$(_coda96_setup_fake_project widget96b)
+    cd "$proj_dir/main"
+    tmux() {
+        case "$1" in
+            list-sessions) echo "${SESSION_PREFIX}orch--riley"; return 0 ;;
+            list-windows) echo "feat-b"; return 0 ;;
+            has-session) return 1 ;;
+            kill-window) echo "$3" > "$capture_file"; return 0 ;;
+        esac
+        return 0
+    }
+    _coda_feature_done feat-b --orch=riley >/dev/null 2>&1
+    local killed
+    killed=$(cat "$capture_file")
+    [ "$killed" = "${SESSION_PREFIX}orch--riley:feat-b" ]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_run_hooks _coda_prune_sessions_for_dir tmux git _coda_detect_default_branch
+}
+
+@test "card96: _coda_feature_done with window match calls kill-window not kill-session" {
+    local actions_file
+    actions_file=$(mktemp)
+    _coda_run_hooks() { return 0; }
+    _coda_prune_sessions_for_dir() { return 0; }
+    _coda96_stub_git
+    local proj_dir
+    proj_dir=$(_coda96_setup_fake_project widget96c)
+    cd "$proj_dir/main"
+    tmux() {
+        case "$1" in
+            list-sessions) echo "${SESSION_PREFIX}orch--riley"; return 0 ;;
+            list-windows) echo "feat-c"; return 0 ;;
+            has-session) return 1 ;;
+            kill-window) echo "kill-window:$3" >> "$actions_file"; return 0 ;;
+            kill-session) echo "kill-session:$3" >> "$actions_file"; return 0 ;;
+        esac
+        return 0
+    }
+    _coda_feature_done feat-c >/dev/null 2>&1
+    grep -q 'kill-window' "$actions_file"
+    ! grep -q 'kill-session' "$actions_file"
+    cd /
+    rm -rf "$proj_dir" "$actions_file"
+    unset -f _coda_run_hooks _coda_prune_sessions_for_dir tmux git _coda_detect_default_branch
+}
+
+@test "card96: _coda_feature_done without window match calls kill-session" {
+    local actions_file
+    actions_file=$(mktemp)
+    _coda_run_hooks() { return 0; }
+    _coda_prune_sessions_for_dir() { return 0; }
+    _coda96_stub_git
+    local proj_dir
+    proj_dir=$(_coda96_setup_fake_project widget96d)
+    cd "$proj_dir/main"
+    tmux() {
+        case "$1" in
+            list-sessions) return 0 ;;
+            list-windows) return 0 ;;
+            has-session) return 0 ;;
+            kill-window) echo "kill-window:$3" >> "$actions_file"; return 0 ;;
+            kill-session) echo "kill-session:$3" >> "$actions_file"; return 0 ;;
+        esac
+        return 0
+    }
+    _coda_feature_done feat-d >/dev/null 2>&1
+    grep -q 'kill-session' "$actions_file"
+    ! grep -q 'kill-window' "$actions_file"
+    cd /
+    rm -rf "$proj_dir" "$actions_file"
+    unset -f _coda_run_hooks _coda_prune_sessions_for_dir tmux git _coda_detect_default_branch
+}
+
+@test "card96: _coda_feature_finish parses --orch <name>" {
+    _coda_run_hooks() { return 0; }
+    _coda_prune_sessions_for_dir() { return 0; }
+    _coda96_stub_git
+    local proj_dir
+    proj_dir=$(_coda96_setup_fake_project widget96e)
+    cd "$proj_dir/main"
+    # Create a fake feature worktree dir so finish detects the project
+    mkdir -p "$proj_dir/feat-e"
+    # Stub git for finish: detect branch as feat-e
+    git() {
+        local args=("$@")
+        for ((i=0; i<${#args[@]}; i++)); do
+            case "${args[i]}" in
+                rev-parse) echo feat-e; return 0 ;;
+                show-ref) return 0 ;;
+                worktree) return 0 ;;
+                branch) return 0 ;;
+                diff) return 0 ;;
+            esac
+        done
+        return 0
+    }
+    _coda_detect_default_branch() { echo main; }
+    local capture_file
+    capture_file=$(mktemp)
+    tmux() {
+        case "$1" in
+            list-sessions) echo "${SESSION_PREFIX}orch--riley"; return 0 ;;
+            list-windows) echo "feat-e"; return 0 ;;
+            has-session) return 1 ;;
+            kill-window) echo "$3" > "$capture_file"; return 0 ;;
+        esac
+        return 0
+    }
+    # Need to cd into the feature dir for finish to detect branch
+    cd "$proj_dir/feat-e"
+    _coda_feature_finish --orch riley >/dev/null 2>&1
+    sleep 2
+    local killed
+    killed=$(cat "$capture_file")
+    [ "$killed" = "${SESSION_PREFIX}orch--riley:feat-e" ]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_run_hooks _coda_prune_sessions_for_dir tmux git _coda_detect_default_branch
+}
+
+@test "card96: _coda_feature_finish with window match uses kill-window in background" {
+    local actions_file
+    actions_file=$(mktemp)
+    _coda_run_hooks() { return 0; }
+    _coda_prune_sessions_for_dir() { return 0; }
+    local proj_dir
+    proj_dir=$(_coda96_setup_fake_project widget96f)
+    mkdir -p "$proj_dir/feat-f"
+    git() {
+        local args=("$@")
+        for ((i=0; i<${#args[@]}; i++)); do
+            case "${args[i]}" in
+                rev-parse) echo feat-f; return 0 ;;
+                show-ref) return 0 ;;
+                worktree) return 0 ;;
+                branch) return 0 ;;
+                diff) return 0 ;;
+            esac
+        done
+        return 0
+    }
+    _coda_detect_default_branch() { echo main; }
+    tmux() {
+        case "$1" in
+            list-sessions) echo "${SESSION_PREFIX}orch--riley"; return 0 ;;
+            list-windows) echo "feat-f"; return 0 ;;
+            has-session) return 1 ;;
+            kill-window) echo "kill-window:$3" >> "$actions_file"; return 0 ;;
+            kill-session) echo "kill-session:$3" >> "$actions_file"; return 0 ;;
+        esac
+        return 0
+    }
+    cd "$proj_dir/feat-f"
+    _coda_feature_finish --force >/dev/null 2>&1
+    sleep 2
+    grep -q 'kill-window' "$actions_file"
+    ! grep -q 'kill-session' "$actions_file"
+    cd /
+    rm -rf "$proj_dir" "$actions_file"
+    unset -f _coda_run_hooks _coda_prune_sessions_for_dir tmux git _coda_detect_default_branch
+}
+
+@test "card96: _coda_feature_finish multi-match error surfaces before backgrounding" {
+    _coda_run_hooks() { return 0; }
+    _coda_prune_sessions_for_dir() { return 0; }
+    local proj_dir
+    proj_dir=$(_coda96_setup_fake_project widget96g)
+    mkdir -p "$proj_dir/feat-g"
+    git() {
+        local args=("$@")
+        for ((i=0; i<${#args[@]}; i++)); do
+            case "${args[i]}" in
+                rev-parse) echo feat-g; return 0 ;;
+                show-ref) return 0 ;;
+                worktree) return 0 ;;
+                branch) return 0 ;;
+                diff) return 0 ;;
+            esac
+        done
+        return 0
+    }
+    _coda_detect_default_branch() { echo main; }
+    tmux() {
+        case "$1" in
+            list-sessions) printf '%s\n' "${SESSION_PREFIX}orch--alpha" "${SESSION_PREFIX}orch--beta"; return 0 ;;
+            list-windows) echo "feat-g"; return 0 ;;
+            has-session) return 1 ;;
+        esac
+        return 0
+    }
+    cd "$proj_dir/feat-g"
+    run _coda_feature_finish --force
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Multiple orchestrator sessions"* ]]
+    cd /
+    rm -rf "$proj_dir"
+    unset -f _coda_run_hooks _coda_prune_sessions_for_dir tmux git _coda_detect_default_branch
+}

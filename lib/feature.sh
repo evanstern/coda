@@ -21,7 +21,12 @@ _coda_feature_start() {
 
     while [ $# -gt 0 ]; do
         case "$1" in
-            --orch)   orch_name="${2:-}"; shift 2 ;;
+            --orch)
+                if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+                    echo "Usage: coda feature start <branch> [base-branch] [project-name] [--orch <name>]"
+                    return 1
+                fi
+                orch_name="$2"; shift 2 ;;
             --orch=*) orch_name="${1#--orch=}"; shift ;;
             *)        positional+=("$1"); shift ;;
         esac

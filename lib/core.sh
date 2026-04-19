@@ -121,21 +121,41 @@ _coda_attach() {
             return 1
         fi
 
-        CODA_LAYOUT_TARGET="${orch_target}:${window_name}" \
-            _layout_spawn "$orch_target" "$dir" "$nvim_appname"
+        local window_target="${orch_target}:${window_name}"
+        local window_exists=false
+        if tmux list-windows -t "$orch_target" -F '#{session_name}:#{window_name}' 2>/dev/null \
+             | grep -Fxq "$window_target"; then
+            window_exists=true
+        fi
+
+        if [ "$window_exists" = false ]; then
+            if ! CODA_LAYOUT_TARGET="$window_target" \
+                    _layout_spawn "$orch_target" "$dir" "$nvim_appname"; then
+                echo "Failed to spawn window '$window_target'."
+                return 1
+            fi
+        fi
 
         tmux set-environment -t "$orch_target" CODA_DIR "$dir"
 
-        CODA_SESSION_NAME="${orch_target}:${window_name}" \
+        CODA_SESSION_NAME="$window_target" \
         CODA_SESSION_DIR="$dir" CODA_SESSION_LAYOUT="$layout" \
             _coda_run_hooks post-session-create
 
         if [ -n "${TMUX:-}" ]; then
-            tmux switch-client -t "${orch_target}:${window_name}" 2>/dev/null || true
-            CODA_SESSION_NAME="${orch_target}:${window_name}" \
+            if tmux list-windows -t "$orch_target" -F '#{session_name}:#{window_name}' 2>/dev/null \
+                 | grep -Fxq "$window_target"; then
+                tmux switch-client -t "$window_target" \
+                    || tmux switch-client -t "$orch_target"
+            else
+                echo "Warning: expected window '$window_target' was not created."
+                echo "Falling back to orchestrator session '$orch_target'."
+                tmux switch-client -t "$orch_target"
+            fi
+            CODA_SESSION_NAME="$window_target" \
                 _coda_run_hooks post-session-attach
         else
-            CODA_SESSION_NAME="${orch_target}:${window_name}" \
+            CODA_SESSION_NAME="$window_target" \
                 _coda_run_hooks post-session-attach
             tmux attach -t "$orch_target"
         fi

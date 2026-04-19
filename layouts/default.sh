@@ -24,11 +24,12 @@ _layout_init() {
 _layout_spawn() {
     local session="$1" dir="$2"
     local target="${CODA_LAYOUT_TARGET:-$session}"
-    local window_flag=()
+    local window_flag=() pane_target
     case "$target" in
-        *:*) window_flag=(-n "${target##*:}") ;;
+        *:*) window_flag=(-n "${target##*:}"); pane_target="${target}.0" ;;
+        *)   pane_target="${target}:.0" ;;
     esac
     tmux new-window -t "${target%%:*}" "${window_flag[@]}" -c "$dir" "opencode; exec \$SHELL"
     tmux split-window -t "$target" -v -l 20% -c "$dir"
-    tmux select-pane -t "${target}.0"
+    tmux select-pane -t "$pane_target"
 }

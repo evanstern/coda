@@ -1284,24 +1284,106 @@ _coda95_stub_git() {
     unset TMUX
 }
 
-@test "card95: _coda_attach window-mode spawns window when orch exists" {
-    local spawn_target="" set_env_target=""
-    _layout_spawn() { spawn_target="${CODA_LAYOUT_TARGET:-}"; return 0; }
+@test "card95: _coda_attach window-mode spawns window when orch exists and window missing" {
+    local spawn_target="" spawn_called=0
+    local state_file
+    state_file=$(mktemp)
+    _layout_spawn() {
+        spawn_called=$((spawn_called+1))
+        spawn_target="${CODA_LAYOUT_TARGET:-}"
+        echo "$spawn_target" >>"$state_file"
+        return 0
+    }
     _coda_load_layout() { return 0; }
     _coda_run_hooks() { return 0; }
     tmux() {
         case "$1" in
             has-session) return 0 ;;
-            set-environment) set_env_target="$3"; return 0 ;;
-            switch-client|attach) return 0 ;;
+            list-windows)
+                if [ -s "$state_file" ]; then
+                    echo "${SESSION_PREFIX}orch--riley:foo"
+                fi
+                return 0 ;;
+            set-environment|switch-client|attach) return 0 ;;
             *) return 0 ;;
         esac
     }
     TMUX=fake CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="${SESSION_PREFIX}orch--riley" \
         _coda_attach myproj--foo /tmp >/dev/null 2>&1
+    [ "$spawn_called" -eq 1 ]
     [ "$spawn_target" = "${SESSION_PREFIX}orch--riley:foo" ]
+    rm -f "$state_file"
     unset -f _layout_spawn _coda_load_layout _coda_run_hooks tmux
     unset TMUX CODA_ORCH_WINDOW_MODE CODA_ORCH_TARGET
+}
+
+@test "card95: _coda_attach window-mode skips spawn when window already exists" {
+    local spawn_called=0
+    _layout_spawn() { spawn_called=$((spawn_called+1)); return 0; }
+    _coda_load_layout() { return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() {
+        case "$1" in
+            has-session) return 0 ;;
+            list-windows) echo "${SESSION_PREFIX}orch--riley:foo"; return 0 ;;
+            set-environment|switch-client|attach) return 0 ;;
+            *) return 0 ;;
+        esac
+    }
+    TMUX=fake CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="${SESSION_PREFIX}orch--riley" \
+        _coda_attach myproj--foo /tmp >/dev/null 2>&1
+    [ "$spawn_called" -eq 0 ]
+    unset -f _layout_spawn _coda_load_layout _coda_run_hooks tmux
+    unset TMUX CODA_ORCH_WINDOW_MODE CODA_ORCH_TARGET
+}
+
+@test "card95: _coda_attach window-mode returns non-zero when spawn fails" {
+    _layout_spawn() { return 1; }
+    _coda_load_layout() { return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() {
+        case "$1" in
+            has-session) return 0 ;;
+            list-windows) return 0 ;;
+            *) return 0 ;;
+        esac
+    }
+    TMUX=fake CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="${SESSION_PREFIX}orch--riley" \
+        run _coda_attach myproj--foo /tmp
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Failed to spawn window"* ]]
+    unset -f _layout_spawn _coda_load_layout _coda_run_hooks tmux
+    unset TMUX CODA_ORCH_WINDOW_MODE CODA_ORCH_TARGET
+}
+
+@test "card95: _coda_feature_start --orch without value returns usage error" {
+    _coda_attach() { return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget4)
+    cd "$proj_dir/main"
+    run _coda_feature_start --orch
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Usage: coda feature start"* ]]
+    cd /
+    rm -rf "$proj_dir"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card95: default layout _layout_spawn uses session:.0 when target unscoped" {
+    local cmd_log
+    cmd_log=$(mktemp)
+    tmux() { printf '%s\n' "$*" >>"$cmd_log"; return 0; }
+    export -f tmux
+    _coda_load_layout default
+    unset CODA_LAYOUT_TARGET
+    _layout_spawn "my-session" "/tmp"
+    grep -q 'select-pane -t my-session:\.0' "$cmd_log"
+    ! grep -q 'select-pane -t my-session\.0' "$cmd_log"
+    unset -f tmux
+    rm -f "$cmd_log"
 }
 
 @test "card95: default layout _layout_spawn honors CODA_LAYOUT_TARGET" {

@@ -138,6 +138,13 @@ _coda_feature_done() {
         git -C "$project_root" branch -D "$branch"
     fi
 
+    # Prune opencode sessions tied to the torn-down worktree.
+    # _orch_prune_sessions_for_dir is provided by the orchestrator plugin;
+    # silently no-op when the plugin isn't loaded.
+    if declare -f _orch_prune_sessions_for_dir &>/dev/null; then
+        _orch_prune_sessions_for_dir "$worktree_dir" 2>/dev/null || true
+    fi
+
     echo "Done."
 }
 
@@ -209,6 +216,9 @@ _coda_feature_finish() {
         fi
         if git -C "$project_root" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
             git -C "$project_root" branch -D "$branch" 2>/dev/null
+        fi
+        if declare -f _orch_prune_sessions_for_dir &>/dev/null; then
+            _orch_prune_sessions_for_dir "$worktree_dir" 2>/dev/null || true
         fi
         CODA_PROJECT_NAME="$project_name" CODA_FEATURE_BRANCH="$branch" \
             _coda_run_hooks post-feature-finish

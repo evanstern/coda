@@ -7,12 +7,12 @@ in parallel across isolated git worktrees, accessible from anywhere via Tailscal
 
 You provision a VM (on Proxmox, or any Ubuntu host), run `./install.sh`, and get:
 
-- **Multiple parallel OpenCode sessions** — each in its own tmux window, each in its own git worktree, each on its own branch. No conflicts, no stepping on each other.
+- **Multiple parallel OpenCode sessions** — each in its own tmux session, each in its own git worktree, each on its own branch. No conflicts, no stepping on each other.
 - **Access from anywhere** — Tailscale gives the VM a stable IP from any network. mosh survives WiFi drops, cellular handoffs, and laptop sleep. tmux sessions persist regardless of connection state.
 - **Fire-and-forget mode** — `opencode serve` exposes an HTTP API. Submit tasks from scripts, cron jobs, or your phone, and check results when you're back.
 - **`coda`** — a unified CLI that wraps all session, project, and feature management into one command with tab completion and a man page.
 
-On the rewrite branch, use `coda-dev` as the preferred development command when you need the new workflow to coexist with an existing stable `coda` installation. It behaves the same way, but defaults to a separate tmux session prefix so both command surfaces can live on one machine safely.
+A sibling command `coda-dev` is also available. It behaves identically to `coda` but defaults to a separate tmux session prefix (`coda-dev-` via `CODA_DEV_SESSION_PREFIX`), so you can run a second `coda` installation alongside the primary one without session-name collisions.
 
 ```
 +----------------------------------------------+
@@ -41,50 +41,79 @@ On the rewrite branch, use `coda-dev` as the preferred development command when 
 
 ## Installation
 
-On a fresh Ubuntu Server 24.04 VM, clone this repo and run:
+Installation is a two-step flow on a fresh VM: system bootstrap, then coda
+wiring. Both scripts are idempotent — safe to re-run at any time.
+
+### 1. System bootstrap (`setup-vm.sh`)
+
+Installs the underlying system dependencies. Run once on a fresh VM.
 
 ```bash
 git clone <this-repo-url> ~/coda
 cd ~/coda
+chmod +x setup-vm.sh
+./setup-vm.sh
+```
+
+| Step | What it does |
+|------|-------------|
+| 1 | apt packages: git, tmux, mosh, curl, build-essential, jq, lsof, etc. |
+| 2 | Core CLI tools |
+| 3 | Neovim (from GitHub releases, >= `NVIM_MIN_VERSION`) |
+| 4 | Node.js via NodeSource (`NODE_MAJOR_VERSION`, default 20) |
+| 5 | fzf (fuzzy finder, binary install) |
+| 6 | tmux Plugin Manager (TPM) |
+| 7 | Base project directories |
+
+`setup-vm.sh` explicitly does **not** install Tailscale, OpenCode, or Claude
+Code — those have their own install paths documented below.
+
+### 2. Coda wiring (`install.sh`)
+
+Installs coda itself: the Go helper binary, MCP server, shell functions,
+completions, man page, and config directories.
+
+```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-`install.sh` is fully idempotent — safe to re-run at any time. It installs and
-configures everything in one pass:
-
 | Step | What it does |
 |------|-------------|
-| 1 | System packages: git, tmux, mosh, curl, build-essential, jq, lsof, etc. |
-| 2 | Neovim (latest release from GitHub, upgrades if installed version is too old) |
-| 3 | Node.js via NodeSource (version-aware, won't skip on outdated installs) |
-| 4 | OpenCode via `npm install -g opencode-ai@latest` |
-| 5 | Claude Code CLI via `npm install -g @anthropic-ai/claude-code` |
-| 6 | fzf (fuzzy finder, binary install) |
-| 7 | yazi (terminal file manager, used by four-pane layout) |
-| 8 | lazygit (terminal git UI, used by four-pane layout) |
-| 9 | Oh My Posh prompt theme engine (user install to `~/.local/bin`) |
-| 10 | tmux Plugin Manager (TPM) |
-| 11 | Tailscale |
-| 12 | Config files, tab completions, man page, Oh My Posh shell init, SSH keepalive, tmux plugins |
+| 1 | Builds the `cmd/coda-core/` Go helper binary |
+| 2 | Installs the shared MCP server (`mcp-server/`) |
+| 3 | Wires shell functions and tab completions into `~/.bashrc` / `~/.zshrc` |
+| 4 | Installs the `man coda` page |
+| 5 | Creates config directories under `~/.config/coda/` |
 
-To skip optional components:
+Available flags (also settable via `.env` or environment variables):
 
 ```bash
-SKIP_TAILSCALE=true ./install.sh
-SKIP_OPENCODE=true  ./install.sh
-SKIP_CLAUDE=true    ./install.sh
-SKIP_OHMYPOSH=true  ./install.sh
-SKIP_YAZI=true      ./install.sh
-SKIP_LAZYGIT=true   ./install.sh
+./install.sh --skip-go       # don't build the coda-core Go binary
+./install.sh --skip-mcp      # don't set up the MCP server
+./install.sh --skip-man      # don't install the man page
+./install.sh --projects-dir ~/work  # override default ~/projects
+./install.sh --help
 ```
+
+### 3. Optional external tools
+
+These are not installed by either script; install them separately when you
+need them:
+
+- **Tailscale** — `curl -fsSL https://tailscale.com/install.sh | sh`
+- **OpenCode** — `npm install -g opencode-ai@latest`
+  (or see https://opencode.ai for current install instructions)
+- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
+- **yazi** / **lazygit** — required only if you use the `four-pane` layout
+- **Oh My Posh** — optional prompt theme
 
 ### After install
 
 Reload your shell first, then choose one provider path.
 
 ```bash
-sudo tailscale up          # connect to your Tailscale network
+sudo tailscale up          # if Tailscale is installed, connect to your tailnet
 source ~/.bashrc           # pick up coda + completions
 tmux                       # start your first session
 ```
@@ -109,8 +138,6 @@ CLIPROXYAPI_API_KEY=""      # optional; set if your proxy requires auth
 coda auth                  # write/update OpenCode provider config
 coda provider status       # probe config/auth readiness (not runtime proof)
 ```
-
-If you are working from the rewrite branch, prefer `coda-dev` for new development sessions. Stable `coda` remains available as a compatibility surface.
 
 ---
 
@@ -221,8 +248,9 @@ If you are working from the rewrite branch, prefer `coda-dev` for new developmen
 
 ## Shell Commands
 
-All commands are provided by shell functions sourced from `shell-functions.sh`.
-On the rewrite branch, `coda-dev` is the preferred development-facing command and `coda` remains available for compatibility.
+All commands are provided by shell functions sourced from `shell-functions.sh`,
+which loads modular libraries from `lib/*.sh`. `coda-dev` is a sibling command
+with a distinct session prefix for running a second installation side by side.
 Run `man coda` for the full manual. Tab completion is available for all subcommands.
 
 ### Global Flags
@@ -640,6 +668,43 @@ with `chmod 600`.
 
 ---
 
+### `coda hooks`
+
+Manage lifecycle hooks that fire on session and feature events.
+
+```bash
+coda hooks ls                        # list all hook scripts
+coda hooks ls post-session-create    # list hooks for one event
+coda hooks events                    # list all supported events
+coda hooks create <event> <name>     # create a new hook script
+coda hooks run <event>               # manually trigger hooks for an event
+```
+
+Hooks are executable scripts. Built-in hooks live in `hooks/<event>/`, user
+hooks live in `CODA_HOOKS_DIR/<event>/`, and plugin hooks are registered via
+`plugin.json`. All three tiers run for each event.
+
+---
+
+### `coda plugin`
+
+Install and manage coda plugins from git repositories. Plugins can register
+shell subcommands, lifecycle hooks, MCP tools, and completions.
+
+```bash
+coda plugin install <git-url>    # install a plugin from a git repo
+coda plugin remove <name>        # remove an installed plugin
+coda plugin update [name]        # update plugin(s) via git pull
+coda plugin ls                   # list installed plugins
+```
+
+Plugins are installed into `CODA_PLUGINS_DIR` (default
+`~/.config/coda/plugins`). Each plugin has a `plugin.json` manifest describing
+what it provides. Restart the MCP server (`coda mcp restart`) after installing
+or updating plugins that expose MCP tools.
+
+---
+
 ### `coda help`
 
 Print a short usage summary. Full manual: `man coda`.
@@ -671,6 +736,8 @@ coda watch <TAB>               → start stop status
 coda mcp <TAB>                 → start stop status restart
 coda provider <TAB>            → status
 coda github <TAB>              → token comment status
+coda hooks <TAB>               → ls events create run
+coda plugin <TAB>              → install remove update ls
 coda serve <TAB>               → [port numbers]
 coda switch                    → (no completion needed — interactive fzf)
 coda --profile <TAB>           → [available profiles]
@@ -737,7 +804,7 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `CODA_OPENCODE_CONFIG_PATH` | empty | Optional override for the OpenCode config path; if set, Coda also exports `OPENCODE_CONFIG` |
 | `NODE_MAJOR_VERSION` | `20` | Node.js major version for install |
 | `PACKAGE_MANAGER` | `npm` | Package manager preference (npm, pnpm, or yarn) |
-| `DEFAULT_LAYOUT` | `four-pane` | Default tmux layout when creating sessions |
+| `DEFAULT_LAYOUT` | `default` | Default tmux layout when creating sessions |
 | `DEFAULT_NVIM_APPNAME` | `nvim` | Neovim config name (maps to `~/.config/<name>/`) |
 | `CODA_LAYOUTS_DIR` | `~/.config/coda/layouts` | User layout scripts directory |
 | `CODA_PROFILES_DIR` | `~/.config/coda/profiles` | User profile overrides directory |
@@ -818,21 +885,44 @@ coda/
 |-- install.sh              Full install: packages → config wiring
 |-- setup-vm.sh             Lightweight VM bootstrap (subset of install.sh)
 |-- coda-watcher.sh         Background session monitor (started via coda watch)
-|-- shell-functions.sh      The coda command (sourced into your shell)
-|-- completions/
-|   |-- coda.bash           Bash tab completion
-|   \-- coda.zsh            Zsh tab completion
+|-- shell-functions.sh      Loader: sources .env, sets defaults, loads lib/*.sh
+|-- lib/
+|   |-- core.sh             Entry points: coda(), coda-dev(), attach/ls/switch/serve/help
+|   |-- helpers.sh          Shared utilities (sanitize, detect branch, find root)
+|   |-- project.sh          Project management (start/add/workon/close/ls)
+|   |-- feature.sh          Feature branch lifecycle (start/done/finish/ls)
+|   |-- layout.sh           Layout management (apply/ls/show/create)
+|   |-- profile.sh          Profile management (ls/create/show)
+|   |-- provider.sh         Auth provider wiring (claude-auth, cliproxyapi)
+|   |-- hooks.sh            Lifecycle hook runner
+|   |-- watch.sh            Session watcher (start/stop/status)
+|   |-- mcp.sh              Shared MCP server management (start/stop/status/restart)
+|   |-- github.sh           GitHub App token + comment plumbing
+|   \-- plugin.sh           Plugin install/load/dispatch
+|-- cmd/
+|   \-- coda-core/          Go companion (layout snapshot, provider helper, watcher)
+|-- mcp-server/
+|   |-- server.js           Shared MCP server (HTTP, port 3111 default)
+|   \-- package.json
+|-- hooks/                  Built-in lifecycle hook scripts
+|   \-- post-project-create/
 |-- layouts/
 |   |-- classic.sh          Single pane running opencode
 |   |-- default.sh          Single pane running opencode (default)
 |   |-- four-pane.sh        opencode + nvim + lazygit + yazi
 |   |-- three-pane.sh       opencode + nvim + shell
 |   \-- wide-twopane.sh     opencode (left) + nvim (right)
-|-- mcp-server/
-|   |-- server.js           Shared MCP server (HTTP, port 3111)
-|   \-- package.json
+|-- completions/
+|   |-- coda.bash           Bash tab completion
+|   \-- coda.zsh            Zsh tab completion
 |-- man/
 |   \-- coda.1              Man page (installed to /usr/local/share/man/man1/)
+|-- docs/
+|   |-- coda-v1-design.md         Core design doc
+|   |-- coda-v1-branch-plan.md    Rewrite branch plan
+|   \-- adr/                      Architecture Decision Records
+|-- tests/                  Shell lifecycle regression tests (bash, mock tmux/fzf)
+|-- test/                   Bats integration tests (module loading, functional)
 |-- scripts/
 |   |-- streamdeck-vm104-connect.sh   Stream Deck helper
 |   \-- tmux-pane-picker.sh           Pane picker utility

@@ -1476,3 +1476,141 @@ _coda95_stub_git() {
     unset -f tmux
     rm -f "$cmd_log"
 }
+
+# --- Card #120: feature env vars exported to post-session-create hook ---
+
+@test "card120: _coda_feature_start exports CODA_FEATURE_BRANCH into _coda_attach" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "branch=${CODA_FEATURE_BRANCH:-unset}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget120a)
+    cd "$proj_dir/main"
+    _coda_feature_start card120-a >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [ "$line" = "branch=card120-a" ]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card120: _coda_feature_start exports CODA_WORKTREE_DIR into _coda_attach" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "worktree=${CODA_WORKTREE_DIR:-unset}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget120b)
+    cd "$proj_dir/main"
+    _coda_feature_start card120-b >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"/widget120b/card120-b"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card120: _coda_feature_start exports CODA_PROJECT_NAME and CODA_PROJECT_DIR" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "proj=${CODA_PROJECT_NAME:-unset} dir=${CODA_PROJECT_DIR:-unset}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget120c)
+    cd "$proj_dir/main"
+    _coda_feature_start card120-c >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"proj=widget120c"* ]]
+    [[ "$line" == *"dir=$proj_dir"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card120: _coda_feature_start with --orch exports CODA_ORCH_NAME" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "orch=${CODA_ORCH_NAME:-unset}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget120d)
+    cd "$proj_dir/main"
+    _coda_feature_start --orch riley card120-d >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [ "$line" = "orch=riley" ]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card120: _coda_feature_start without --orch does not export CODA_ORCH_NAME" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "orch=${CODA_ORCH_NAME:-unset}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget120e)
+    cd "$proj_dir/main"
+    _coda_feature_start card120-e >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [ "$line" = "orch=unset" ]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card120: feature env vars do not leak past _coda_feature_start" {
+    _coda_attach() { return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget120f)
+    cd "$proj_dir/main"
+    unset CODA_FEATURE_BRANCH CODA_WORKTREE_DIR CODA_ORCH_NAME
+    _coda_feature_start --orch riley card120-f >/dev/null 2>&1
+    [ -z "${CODA_FEATURE_BRANCH:-}" ]
+    [ -z "${CODA_WORKTREE_DIR:-}" ]
+    [ -z "${CODA_ORCH_NAME:-}" ]
+    cd /
+    rm -rf "$proj_dir"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card120: existing-worktree path also exports feature env vars" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "branch=${CODA_FEATURE_BRANCH:-unset} orch=${CODA_ORCH_NAME:-unset}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget120g)
+    # Pre-create the worktree dir so we hit the existing-worktree branch
+    mkdir -p "$proj_dir/card120-g"
+    cd "$proj_dir/main"
+    _coda_feature_start --orch riley card120-g >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"branch=card120-g"* ]]
+    [[ "$line" == *"orch=riley"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}

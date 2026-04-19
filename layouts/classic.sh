@@ -22,7 +22,12 @@ _layout_init() {
 
 _layout_spawn() {
     local session="$1" dir="$2"
-    tmux new-window -t "$session" -c "$dir" "opencode; exec \$SHELL"
+    local target="${CODA_LAYOUT_TARGET:-$session}"
+    local window_flag=()
+    case "$target" in
+        *:*) window_flag=(-n "${target##*:}") ;;
+    esac
+    tmux new-window -t "${target%%:*}" "${window_flag[@]}" -c "$dir" "opencode; exec \$SHELL"
 }
 
 # Legacy alias

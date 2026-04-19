@@ -1156,3 +1156,187 @@ setup() {
     unset '_CODA_PLUGIN_COMMANDS[goodcmd]'
     rm -rf "$tmpdir"
 }
+
+# --- Card #95: --orch flag and window-mode tests ---
+
+_coda95_setup_fake_project() {
+    local project_name="$1"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    export PROJECTS_DIR="$tmpdir"
+    local root="$tmpdir/$project_name"
+    mkdir -p "$root/.bare" "$root/main"
+    printf 'gitdir: ./.bare\n' > "$root/.git"
+    echo "$root"
+}
+
+_coda95_stub_git() {
+    git() {
+        local args=("$@")
+        for ((i=0; i<${#args[@]}; i++)); do
+            case "${args[i]}" in
+                show-ref) return 0 ;;
+                fetch|worktree) return 0 ;;
+                rev-parse) echo main; return 0 ;;
+            esac
+        done
+        return 0
+    }
+    _coda_detect_default_branch() { echo main; }
+}
+
+@test "card95: _coda_feature_start parses --orch <name> with space" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "${CODA_ORCH_TARGET:-}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget)
+    cd "$proj_dir/main"
+    _coda_feature_start --orch riley card95-a >/dev/null 2>&1
+    local target
+    target=$(cat "$capture_file")
+    [ "$target" = "${SESSION_PREFIX}orch--riley" ]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card95: _coda_feature_start parses --orch=name form" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "${CODA_ORCH_TARGET:-}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget2)
+    cd "$proj_dir/main"
+    _coda_feature_start --orch=riley card95-b >/dev/null 2>&1
+    local target
+    target=$(cat "$capture_file")
+    [ "$target" = "${SESSION_PREFIX}orch--riley" ]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card95: _coda_feature_start without --orch does not set CODA_ORCH_TARGET" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_attach() { echo "mode=${CODA_ORCH_WINDOW_MODE:-unset} target=${CODA_ORCH_TARGET:-unset}" >"$capture_file"; return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget3)
+    cd "$proj_dir/main"
+    _coda_feature_start card95-c >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"mode=unset"* ]]
+    [[ "$line" == *"target=unset"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}
+
+@test "card95: _coda_attach window-mode requires existing orch session" {
+    local spawn_calls=0
+    _layout_spawn() { spawn_calls=$((spawn_calls+1)); return 0; }
+    tmux() {
+        case "$1" in
+            has-session) return 1 ;;
+            set-environment|switch-client) return 0 ;;
+            attach) return 0 ;;
+            *) return 0 ;;
+        esac
+    }
+    _coda_load_layout() { return 0; }
+    _coda_run_hooks() { return 0; }
+    CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="${SESSION_PREFIX}orch--ghost" \
+        run _coda_attach myproj--branchx /tmp
+    [[ "$output" == *"Orchestrator session not found"* ]]
+    [[ "$output" == *"session-mode"* ]]
+    unset -f _layout_spawn tmux _coda_load_layout _coda_run_hooks
+    unset CODA_ORCH_WINDOW_MODE CODA_ORCH_TARGET
+}
+
+@test "card95: _coda_attach without window-mode takes standard path" {
+    local init_called=0 spawn_called=0
+    _layout_init() { init_called=1; return 0; }
+    _layout_spawn() { spawn_called=1; return 0; }
+    _coda_load_layout() { return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() {
+        case "$1" in
+            has-session) return 1 ;;
+            switch-client|attach|set-environment) return 0 ;;
+            *) return 0 ;;
+        esac
+    }
+    TMUX=fake _coda_attach myproj--branchy /tmp >/dev/null 2>&1
+    [ "$init_called" -eq 1 ]
+    [ "$spawn_called" -eq 0 ]
+    unset -f _layout_init _layout_spawn _coda_load_layout _coda_run_hooks tmux
+    unset TMUX
+}
+
+@test "card95: _coda_attach window-mode spawns window when orch exists" {
+    local spawn_target="" set_env_target=""
+    _layout_spawn() { spawn_target="${CODA_LAYOUT_TARGET:-}"; return 0; }
+    _coda_load_layout() { return 0; }
+    _coda_run_hooks() { return 0; }
+    tmux() {
+        case "$1" in
+            has-session) return 0 ;;
+            set-environment) set_env_target="$3"; return 0 ;;
+            switch-client|attach) return 0 ;;
+            *) return 0 ;;
+        esac
+    }
+    TMUX=fake CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="${SESSION_PREFIX}orch--riley" \
+        _coda_attach myproj--foo /tmp >/dev/null 2>&1
+    [ "$spawn_target" = "${SESSION_PREFIX}orch--riley:foo" ]
+    unset -f _layout_spawn _coda_load_layout _coda_run_hooks tmux
+    unset TMUX CODA_ORCH_WINDOW_MODE CODA_ORCH_TARGET
+}
+
+@test "card95: default layout _layout_spawn honors CODA_LAYOUT_TARGET" {
+    local cmd_log
+    cmd_log=$(mktemp)
+    tmux() { printf '%s\n' "$*" >>"$cmd_log"; return 0; }
+    export -f tmux
+    _coda_load_layout default
+    CODA_LAYOUT_TARGET="coda-orch--riley:auth" _layout_spawn "ignored" "/tmp"
+    grep -q 'new-window -t coda-orch--riley -n auth' "$cmd_log"
+    unset -f tmux
+    rm -f "$cmd_log"
+}
+
+@test "card95: default layout _layout_spawn falls back to session when no target" {
+    local cmd_log
+    cmd_log=$(mktemp)
+    tmux() { printf '%s\n' "$*" >>"$cmd_log"; return 0; }
+    export -f tmux
+    _coda_load_layout default
+    unset CODA_LAYOUT_TARGET
+    _layout_spawn "my-session" "/tmp"
+    grep -q 'new-window -t my-session ' "$cmd_log"
+    unset -f tmux
+    rm -f "$cmd_log"
+}
+
+@test "card95: classic layout _layout_spawn honors CODA_LAYOUT_TARGET" {
+    local cmd_log
+    cmd_log=$(mktemp)
+    tmux() { printf '%s\n' "$*" >>"$cmd_log"; return 0; }
+    export -f tmux
+    _coda_load_layout classic
+    CODA_LAYOUT_TARGET="coda-orch--riley:auth" _layout_spawn "ignored" "/tmp"
+    grep -q 'new-window -t coda-orch--riley -n auth' "$cmd_log"
+    unset -f tmux
+    rm -f "$cmd_log"
+}

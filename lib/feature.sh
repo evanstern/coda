@@ -16,13 +16,35 @@ _coda_feature() {
 }
 
 _coda_feature_start() {
-    local branch="${1:-}"
-    local base="${2:-}"
-    local project_name="${3:-}"
+    local branch="" base="" project_name="" orch_name=""
+    local positional=()
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --orch)   orch_name="${2:-}"; shift 2 ;;
+            --orch=*) orch_name="${1#--orch=}"; shift ;;
+            *)        positional+=("$1"); shift ;;
+        esac
+    done
+
+    branch="${positional[0]:-}"
+    base="${positional[1]:-}"
+    project_name="${positional[2]:-}"
 
     if [ -z "$branch" ]; then
-        echo "Usage: coda feature start <branch> [base-branch] [project-name]"
+        echo "Usage: coda feature start <branch> [base-branch] [project-name] [--orch <name>]"
         return 1
+    fi
+
+    # Resolve window-mode trigger. Explicit --orch always wins; otherwise
+    # CODA_ORCH_WINDOW_MODE=1 acts as an alternate trigger. If the env is set
+    # but no orch name resolves (project-field discovery is card #94), warn
+    # and fall back to session-mode for this card's scope.
+    local orch_target=""
+    if [ -n "$orch_name" ]; then
+        orch_target="${SESSION_PREFIX}orch--$(_coda_sanitize_session_name "$orch_name")"
+    elif [ "${CODA_ORCH_WINDOW_MODE:-}" = "1" ]; then
+        echo "CODA_ORCH_WINDOW_MODE=1 set but no --orch <name> resolvable; falling back to session-mode."
     fi
 
     local project_root
@@ -60,7 +82,12 @@ _coda_feature_start() {
     if [ -d "$worktree_dir" ]; then
         echo "Worktree already exists: $worktree_dir"
         echo "Attaching to existing session..."
-        _coda_attach "${project_name}--${branch}" "$worktree_dir"
+        if [ -n "$orch_target" ]; then
+            CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="$orch_target" \
+                _coda_attach "${project_name}--${branch}" "$worktree_dir"
+        else
+            _coda_attach "${project_name}--${branch}" "$worktree_dir"
+        fi
         return 0
     fi
 
@@ -84,7 +111,13 @@ _coda_feature_start() {
     CODA_PROJECT_NAME="$project_name" CODA_PROJECT_DIR="$project_root" \
     CODA_FEATURE_BRANCH="$branch" CODA_WORKTREE_DIR="$worktree_dir" \
         _coda_run_hooks post-feature-create
-    _coda_attach "${project_name}--${branch}" "$worktree_dir"
+
+    if [ -n "$orch_target" ]; then
+        CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="$orch_target" \
+            _coda_attach "${project_name}--${branch}" "$worktree_dir"
+    else
+        _coda_attach "${project_name}--${branch}" "$worktree_dir"
+    fi
 }
 
 _coda_feature_done() {

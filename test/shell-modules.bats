@@ -1614,3 +1614,35 @@ _coda95_stub_git() {
     rm -rf "$proj_dir" "$capture_file"
     unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
 }
+
+@test "card120: post-session-create hook called from _coda_attach sees feature vars" {
+    local capture_file
+    capture_file=$(mktemp)
+    # Simulate _coda_attach the way core.sh does: run post-session-create
+    # inline so we verify the exported vars propagate through the dynamic
+    # call chain, not just to _coda_attach itself.
+    _coda_attach() {
+        _coda_run_hooks post-session-create
+        return 0
+    }
+    _coda_run_hooks() {
+        if [ "$1" = "post-session-create" ]; then
+            echo "proj=${CODA_PROJECT_NAME:-unset} branch=${CODA_FEATURE_BRANCH:-unset} orch=${CODA_ORCH_NAME:-unset}" >"$capture_file"
+        fi
+        return 0
+    }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget120h)
+    cd "$proj_dir/main"
+    _coda_feature_start --orch riley card120-h >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"proj=widget120h"* ]]
+    [[ "$line" == *"branch=card120-h"* ]]
+    [[ "$line" == *"orch=riley"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
+}

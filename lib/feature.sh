@@ -84,22 +84,27 @@ _coda_feature_start() {
 
     local worktree_dir="$project_root/$branch"
 
+    # Export feature/project context with function-scoped `local -x` so
+    # hooks fired from inside _coda_attach (post-session-create,
+    # post-session-attach) can see the feature vars. Vars disappear
+    # when _coda_feature_start returns -- they don't leak to the caller.
+    local -x CODA_PROJECT_NAME="$project_name"
+    local -x CODA_PROJECT_DIR="$project_root"
+    local -x CODA_FEATURE_BRANCH="$branch"
+    local -x CODA_WORKTREE_DIR="$worktree_dir"
+    if [ -n "$orch_name" ]; then
+        local -x CODA_ORCH_NAME="$orch_name"
+    fi
+
     if [ -d "$worktree_dir" ]; then
         echo "Worktree already exists: $worktree_dir"
         echo "Attaching to existing session..."
-        (
-            export CODA_PROJECT_NAME="$project_name"
-            export CODA_PROJECT_DIR="$project_root"
-            export CODA_FEATURE_BRANCH="$branch"
-            export CODA_WORKTREE_DIR="$worktree_dir"
-            [ -n "$orch_name" ] && export CODA_ORCH_NAME="$orch_name"
-            if [ -n "$orch_target" ]; then
-                CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="$orch_target" \
-                    _coda_attach "${project_name}--${branch}" "$worktree_dir"
-            else
+        if [ -n "$orch_target" ]; then
+            CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="$orch_target" \
                 _coda_attach "${project_name}--${branch}" "$worktree_dir"
-            fi
-        )
+        else
+            _coda_attach "${project_name}--${branch}" "$worktree_dir"
+        fi
         return 0
     fi
 
@@ -120,23 +125,14 @@ _coda_feature_start() {
         fi
     fi
 
-    CODA_PROJECT_NAME="$project_name" CODA_PROJECT_DIR="$project_root" \
-    CODA_FEATURE_BRANCH="$branch" CODA_WORKTREE_DIR="$worktree_dir" \
-        _coda_run_hooks post-feature-create
+    _coda_run_hooks post-feature-create
 
-    (
-        export CODA_PROJECT_NAME="$project_name"
-        export CODA_PROJECT_DIR="$project_root"
-        export CODA_FEATURE_BRANCH="$branch"
-        export CODA_WORKTREE_DIR="$worktree_dir"
-        [ -n "$orch_name" ] && export CODA_ORCH_NAME="$orch_name"
-        if [ -n "$orch_target" ]; then
-            CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="$orch_target" \
-                _coda_attach "${project_name}--${branch}" "$worktree_dir"
-        else
+    if [ -n "$orch_target" ]; then
+        CODA_ORCH_WINDOW_MODE=1 CODA_ORCH_TARGET="$orch_target" \
             _coda_attach "${project_name}--${branch}" "$worktree_dir"
-        fi
-    )
+    else
+        _coda_attach "${project_name}--${branch}" "$worktree_dir"
+    fi
 }
 
 _coda_feature_done() {

@@ -138,6 +138,10 @@ _coda_feature_done() {
         git -C "$project_root" branch -D "$branch"
     fi
 
+    # Hard-delete any opencode sessions scoped to this worktree.
+    # Silent no-op if the orchestrator plugin isn't loaded.
+    _coda_prune_sessions_for_dir "$worktree_dir"
+
     echo "Done."
 }
 
@@ -210,6 +214,7 @@ _coda_feature_finish() {
         if git -C "$project_root" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
             git -C "$project_root" branch -D "$branch" 2>/dev/null
         fi
+        _coda_prune_sessions_for_dir "$worktree_dir"
         CODA_PROJECT_NAME="$project_name" CODA_FEATURE_BRANCH="$branch" \
             _coda_run_hooks post-feature-finish
     ) &
@@ -229,5 +234,31 @@ _coda_feature_ls() {
     echo "Worktrees for $(basename "$project_root"):"
     git -C "$project_root" worktree list | while IFS= read -r line; do
         echo "  $line"
+    done
+}
+
+_coda_prune_sessions_for_dir() {
+    local worktree_dir="$1"
+    [ -n "$worktree_dir" ] || return 0
+
+    if ! command -v _orch_prune_dir >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local base_dir="${ORCH_BASE_DIR:-$HOME/.config/coda/orchestrators}"
+    [ -d "$base_dir" ] || return 0
+
+    local pf port
+    for pf in "$base_dir"/*/port; do
+        [ -f "$pf" ] || continue
+        port=$(cat "$pf")
+        case "$port" in
+            ''|*[!0-9]*) continue ;;
+        esac
+        if ! curl -sf "http://localhost:$port/global/health" >/dev/null 2>&1; then
+            continue
+        fi
+        _orch_prune_dir "$port" "$worktree_dir" --hard --keep 0 --days 0 \
+            >/dev/null 2>&1 || true
     done
 }

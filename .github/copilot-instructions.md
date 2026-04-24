@@ -59,8 +59,7 @@ focus card explicitly asks for them.
 ### First-run side effects
 
 `coda version` is pure; it does not touch disk. `coda agent ...`
-commands (once #168 lands) open or create
-`$XDG_STATE_HOME/coda/coda.db` (default
+commands open or create `$XDG_STATE_HOME/coda/coda.db` (default
 `~/.local/state/coda/coda.db`) and run pending migrations. The
 containing directory is created if missing.
 

@@ -87,7 +87,7 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 			continue
 		}
 		if err := applyMigration(ctx, db, m); err != nil {
-			return fmt.Errorf("apply migration %03d_%s: %w", m.version, m.name, err)
+			return fmt.Errorf("apply migration %s: %w", m.name, err)
 		}
 	}
 	return nil
@@ -114,14 +114,20 @@ func appliedVersions(ctx context.Context, db *sql.DB) (map[int]struct{}, error) 
 }
 
 func applyMigration(ctx context.Context, db *sql.DB, m migration) error {
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire migration conn: %w", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return fmt.Errorf("disable foreign_keys: %w", err)
 	}
 	defer func() {
-		_, _ = db.ExecContext(ctx, `PRAGMA foreign_keys = ON`)
+		_, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`)
 	}()
 
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}

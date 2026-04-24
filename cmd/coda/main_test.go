@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -130,5 +131,53 @@ func TestStartStopAgentHappyPath(t *testing.T) {
 	}
 	if stopped.State != session.StateStopped || stopped.StopReason != "done" {
 		t.Fatalf("unexpected stopped session: %+v", stopped)
+	}
+}
+
+func TestStopAgentRollsBackWhenProviderStopFails(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	if err := store.CreateAgent(ctx, session.Agent{Name: "a", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	provider := &stubProvider{stopErr: errors.New("boom")}
+	reg := session.NewProviderRegistry()
+	reg.Register("stub", provider)
+
+	var stdout, stderr bytes.Buffer
+	if code := startAgent(ctx, store, reg, "a", &stdout, &stderr); code != exitOK {
+		t.Fatalf("start: code=%d stderr=%q", code, stderr.String())
+	}
+	active, err := store.GetActiveSession(ctx, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	priorState := active.State
+
+	stdout.Reset()
+	stderr.Reset()
+	code := stopAgent(ctx, store, reg, "a", "done", &stdout, &stderr)
+	if code != exitUserErr {
+		t.Fatalf("expected exit %d, got %d (stderr=%q)", exitUserErr, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "provider stop:") {
+		t.Fatalf("expected provider stop error in stderr, got %q", stderr.String())
+	}
+	if provider.stopCalls != 1 {
+		t.Fatalf("expected 1 stop call, got %d", provider.stopCalls)
+	}
+
+	got, err := store.GetSession(ctx, active.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != priorState {
+		t.Fatalf("expected rollback to %s, got %s", priorState, got.State)
+	}
+	if got.StoppedAt != nil {
+		t.Fatalf("expected stopped_at cleared after rollback, got %v", got.StoppedAt)
+	}
+	if got.StopReason != "" {
+		t.Fatalf("expected stop_reason cleared after rollback, got %q", got.StopReason)
 	}
 }

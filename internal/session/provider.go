@@ -63,10 +63,10 @@ func (r *ProviderRegistry) Register(name string, p Provider) {
 	r.providers[name] = p
 }
 
-// Get returns the provider registered under name, or an error whose
-// message matches the spec: "no provider registered for agent <name>
-// (agent.provider=<value>)". The caller passes the agent name and
-// provider value so the error text is accurate from a single site.
+// Get returns the provider registered under name, and a bool
+// indicating whether such a provider exists. Callers that need to
+// produce the user-facing "no provider registered" error construct
+// a *NoProviderError at the call site.
 func (r *ProviderRegistry) Get(providerName string) (Provider, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

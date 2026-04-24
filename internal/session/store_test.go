@@ -221,6 +221,81 @@ func TestGetActiveSessionNone(t *testing.T) {
 	}
 }
 
+func TestRollbackFromStoppedHappyPath(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+	if err := store.CreateAgent(ctx, session.Agent{Name: "a", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	id := session.NewSessionID()
+	if err := store.CreateSession(ctx, session.Session{ID: id, AgentName: "a", Provider: "stub", State: session.StateCreated}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.TransitionSession(ctx, id, session.StateCreated, session.StateStarted); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.TransitionSession(ctx, id, session.StateStarted, session.StateStopped, "oops"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RollbackFromStopped(ctx, id, session.StateStarted); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+	got, err := store.GetSession(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != session.StateStarted {
+		t.Fatalf("expected started after rollback, got %s", got.State)
+	}
+	if got.StoppedAt != nil {
+		t.Fatalf("expected stopped_at cleared, got %v", got.StoppedAt)
+	}
+	if got.StopReason != "" {
+		t.Fatalf("expected stop_reason cleared, got %q", got.StopReason)
+	}
+}
+
+func TestRollbackFromStoppedRejectsTerminal(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+	if err := store.CreateAgent(ctx, session.Agent{Name: "a", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	id := session.NewSessionID()
+	if err := store.CreateSession(ctx, session.Session{ID: id, AgentName: "a", Provider: "stub", State: session.StateCreated}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.TransitionSession(ctx, id, session.StateCreated, session.StateStopped, "done"); err != nil {
+		t.Fatal(err)
+	}
+	err := store.RollbackFromStopped(ctx, id, session.StateStopped)
+	if !errors.Is(err, session.ErrInvalidTransition) {
+		t.Fatalf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestRollbackFromStoppedRequiresStoppedFrom(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+	if err := store.CreateAgent(ctx, session.Agent{Name: "a", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	id := session.NewSessionID()
+	if err := store.CreateSession(ctx, session.Session{ID: id, AgentName: "a", Provider: "stub", State: session.StateCreated}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.TransitionSession(ctx, id, session.StateCreated, session.StateStarted); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.TransitionSession(ctx, id, session.StateStarted, session.StateRunning); err != nil {
+		t.Fatal(err)
+	}
+	err := store.RollbackFromStopped(ctx, id, session.StateStarted)
+	if !errors.Is(err, session.ErrStaleState) {
+		t.Fatalf("expected ErrStaleState, got %v", err)
+	}
+}
+
 func TestListAgents(t *testing.T) {
 	store, _ := newStore(t)
 	ctx := context.Background()

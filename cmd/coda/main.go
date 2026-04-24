@@ -270,12 +270,17 @@ func stopAgent(ctx context.Context, store *session.Store, reg *session.ProviderR
 		fmt.Fprintf(stderr, "error: %v\n", &session.NoProviderError{AgentName: agent.Name, Provider: agent.Provider})
 		return exitUserErr
 	}
-	if err := provider.Stop(sess.ID); err != nil {
+	prev := sess.State
+	if err := store.TransitionSession(ctx, sess.ID, prev, session.StateStopped, reason); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
-	if err := store.TransitionSession(ctx, sess.ID, sess.State, session.StateStopped, reason); err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
+	if err := provider.Stop(sess.ID); err != nil {
+		if rbErr := store.RollbackFromStopped(ctx, sess.ID, prev); rbErr != nil {
+			fmt.Fprintf(stderr, "error: provider stop: %v; rollback: %v\n", err, rbErr)
+			return exitUserErr
+		}
+		fmt.Fprintf(stderr, "error: provider stop: %v\n", err)
 		return exitUserErr
 	}
 	fmt.Fprintf(stdout, "stopped: %s\n", sess.ID)

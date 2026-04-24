@@ -232,6 +232,40 @@ func (s *Store) TransitionSession(ctx context.Context, id string, from, to Sessi
 	return nil
 }
 
+// RollbackFromStopped reverts a stopped session back to a prior
+// non-terminal state. This is only for the narrow case where a
+// higher layer optimistically transitioned to stopped but the
+// corresponding external action (e.g. Provider.Stop()) failed.
+// The caller is responsible for knowing that the rollback makes
+// sense. `to` must be one of: created, started, running.
+//
+// The rollback also clears stopped_at and stop_reason that the
+// forward transition set, so the row's termination metadata stays
+// consistent with its state.
+func (s *Store) RollbackFromStopped(ctx context.Context, id string, to SessionState) error {
+	switch to {
+	case StateCreated, StateStarted, StateRunning:
+	default:
+		return fmt.Errorf("%w: rollback to %s", ErrInvalidTransition, to)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE sessions
+		    SET state = ?, stopped_at = NULL, stop_reason = ''
+		  WHERE id = ? AND state = 'stopped'`,
+		string(to), id)
+	if err != nil {
+		return fmt.Errorf("rollback from stopped: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: session %s not in state stopped", ErrStaleState, id)
+	}
+	return nil
+}
+
 func validTransition(from, to SessionState) bool {
 	switch from {
 	case StateCreated:

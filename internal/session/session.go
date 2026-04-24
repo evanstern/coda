@@ -21,9 +21,10 @@ const (
 	StateStopped SessionState = "stopped"
 )
 
-// Session is a run of an agent under a provider. Exactly one
-// non-stopped Session may exist per agent at a time (enforced both
-// in code and via a partial unique index).
+// Session is a run of an agent under a provider. At most one
+// non-stopped Session may exist per agent at a time; this is
+// enforced by the sessions_one_active_per_agent partial unique
+// index (see internal/db/migrations/001_initial.sql).
 type Session struct {
 	ID         string
 	AgentName  string

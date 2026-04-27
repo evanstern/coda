@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -58,6 +59,48 @@ func newTestStores(t *testing.T) (*session.Store, *messages.Store) {
 		t.Fatalf("migrate: %v", err)
 	}
 	return session.NewStore(d), messages.NewStore(d)
+}
+
+func TestAgentNewThenBoot(t *testing.T) {
+	state := t.TempDir()
+	config := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	t.Setenv("XDG_CONFIG_HOME", config)
+
+	var stdout, stderr bytes.Buffer
+	if code := agentNew([]string{"ash"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("agent new: code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "created: ash") {
+		t.Fatalf("unexpected new stdout: %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := agentBoot([]string{"ash"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("agent boot: code=%d stderr=%q", code, stderr.String())
+	}
+	var got struct {
+		AgentName string            `json:"agent_name"`
+		ConfigDir string            `json:"config_dir"`
+		Files     []string          `json:"files"`
+		EnvVars   map[string]string `json:"env_vars"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("decode boot json: %v\nraw: %s", err, stdout.String())
+	}
+	if got.AgentName != "ash" {
+		t.Fatalf("agent_name=%q", got.AgentName)
+	}
+	if got.EnvVars["CODA_AGENT_NAME"] != "ash" {
+		t.Fatalf("env_vars=%v", got.EnvVars)
+	}
+	if !strings.HasPrefix(got.ConfigDir, config) {
+		t.Fatalf("config_dir %q not under %q", got.ConfigDir, config)
+	}
+	if len(got.Files) < 1 {
+		t.Fatalf("expected at least one file, got %v", got.Files)
+	}
 }
 
 func TestStartAgentNoProvider(t *testing.T) {

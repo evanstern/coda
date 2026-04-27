@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/evanstern/coda/internal/db"
+	"github.com/evanstern/coda/internal/identity"
 	"github.com/evanstern/coda/internal/messages"
 	"github.com/evanstern/coda/internal/session"
 )
@@ -67,6 +68,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintf(w, "  version                          print the coda version\n")
 	fmt.Fprintf(w, "  agent new <name> [--provider p]  create a new agent\n")
 	fmt.Fprintf(w, "  agent ls                         list agents\n")
+	fmt.Fprintf(w, "  agent boot <name>                load identity for a provider\n")
 	fmt.Fprintf(w, "  agent start <name>               start an agent session\n")
 	fmt.Fprintf(w, "  agent stop <name> [--reason r]   stop the active session for an agent\n")
 	fmt.Fprintf(w, "  send <from> <to> <type> <body>   route a message\n")
@@ -84,6 +86,8 @@ func runAgent(args []string, stdout, stderr io.Writer) int {
 		return agentNew(args[1:], stdout, stderr)
 	case "ls":
 		return agentLs(args[1:], stdout, stderr)
+	case "boot":
+		return agentBoot(args[1:], stdout, stderr)
 	case "start":
 		return agentStart(args[1:], stdout, stderr)
 	case "stop":
@@ -142,6 +146,16 @@ func agentNew(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
+	root, err := identity.DefaultRoot()
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	layout := identity.Resolve(root, name)
+	if err := identity.Scaffold(layout); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
 	ctx := context.Background()
 	conn, store, err := openStore(ctx)
 	if err != nil {
@@ -149,11 +163,53 @@ func agentNew(args []string, stdout, stderr io.Writer) int {
 		return exitUserErr
 	}
 	defer conn.Close()
-	if err := store.CreateAgent(ctx, session.Agent{Name: name, Provider: *provider}); err != nil {
+	if err := store.CreateAgent(ctx, session.Agent{Name: name, Provider: *provider, ConfigDir: layout.Root}); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
 	fmt.Fprintf(stdout, "created: %s\n", name)
+	return exitOK
+}
+
+func agentBoot(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("agent boot", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintf(stderr, "usage: coda agent boot <name>\n")
+		return exitUsage
+	}
+	name := fs.Arg(0)
+	ctx := context.Background()
+	conn, store, err := openStore(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	defer conn.Close()
+	agent, err := store.GetAgent(ctx, name)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	if agent.ConfigDir == "" {
+		fmt.Fprintf(stderr, "error: agent %q has no config_dir; run \"coda agent new %s\" to scaffold or set it manually\n", name, name)
+		return exitUserErr
+	}
+	layout := identity.LayoutAt(agent.ConfigDir)
+	payload, err := identity.Boot(agent.Name, layout)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	out, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	fmt.Fprintln(stdout, string(out))
 	return exitOK
 }
 

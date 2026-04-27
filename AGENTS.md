@@ -74,4 +74,6 @@ before inferring.
 ## Status
 
 v3 scaffold. Session/identity/messages/plugin/feature/db packages are
-stubs. `coda version` is the only working command.
+stubs. `coda-dev version` is the only working command (post-install).
+
+Install: `./scripts/install.sh` (drops `coda-dev` in `$XDG_BIN_HOME`).

@@ -73,10 +73,12 @@ before inferring.
 
 ## Status
 
-v3 scaffold. Session, db, identity, and messaging primitives are
-landed: `coda agent new` provisions identity dirs, `coda agent boot`
-emits a provider-ready JSON payload, `coda agent ls/start/stop` manage
-sessions, and `coda send/recv/ack` carries typed messages between
-agents. Plugin and feature packages are still stubs.
+v3 scaffold. Session, db, identity, messaging, and feature
+primitives are landed: `coda agent new` provisions identity dirs,
+`coda agent boot` emits a provider-ready JSON payload, `coda agent
+ls/start/stop` manage sessions, `coda send/recv/ack` carries typed
+messages between agents, and `coda feature start/finish/ls` manages
+git-worktree lifecycles with a local hook runner. The plugin host
+is still a stub.
 
 Install: `./scripts/install.sh` (drops `coda-dev` in `$XDG_BIN_HOME`).

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/evanstern/coda/internal/db"
+	"github.com/evanstern/coda/internal/feature"
 	"github.com/evanstern/coda/internal/identity"
 	"github.com/evanstern/coda/internal/messages"
 	"github.com/evanstern/coda/internal/session"
@@ -52,6 +53,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runRecv(args[1:], stdout, stderr)
 	case "ack":
 		return runAck(args[1:], stdout, stderr)
+	case "feature":
+		return runFeature(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		printUsage(stdout)
 		return exitOK
@@ -74,6 +77,9 @@ func printUsage(w io.Writer) {
 	fmt.Fprintf(w, "  send <from> <to> <type> <body>   route a message\n")
 	fmt.Fprintf(w, "  recv <agent>                     list unacked messages for agent\n")
 	fmt.Fprintf(w, "  ack <id>                         mark a message acknowledged\n")
+	fmt.Fprintf(w, "  feature start <branch>           create a worktree from the default or given base branch\n")
+	fmt.Fprintf(w, "  feature finish <branch>          remove a worktree and delete its branch\n")
+	fmt.Fprintf(w, "  feature ls                       list active feature worktrees\n")
 }
 
 func runAgent(args []string, stdout, stderr io.Writer) int {
@@ -571,4 +577,122 @@ func bodyPreview(body []byte) string {
 		s = s[:maxLen]
 	}
 	return s
+}
+
+func runFeature(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintf(stderr, "usage: coda feature <subcommand>\n")
+		return exitUsage
+	}
+	switch args[0] {
+	case "start":
+		return featureStart(args[1:], stdout, stderr)
+	case "finish":
+		return featureFinish(args[1:], stdout, stderr)
+	case "ls":
+		return featureLs(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "unknown feature subcommand: %s\n", args[0])
+		return exitUsage
+	}
+}
+
+func featureStart(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("feature start", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	base := fs.String("base", "", "base branch to fork from (default: detect)")
+	project := fs.String("project", "", "project name (default: detect from cwd)")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintf(stderr, "usage: coda feature start <branch> [--base <branch>] [--project <name>]\n")
+		return exitUsage
+	}
+	branch := fs.Arg(0)
+	proj, err := resolveFeatureProject(*project)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	runner := feature.NewLocalHookRunner("", stderr)
+	wt, err := feature.Start(context.Background(), proj, branch, *base, runner)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	fmt.Fprintf(stdout, "created: %s at %s\n", wt.Branch, wt.Path)
+	return exitOK
+}
+
+func featureFinish(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("feature finish", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	project := fs.String("project", "", "project name (default: detect from cwd)")
+	force := fs.Bool("force", false, "discard uncommitted changes")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintf(stderr, "usage: coda feature finish <branch> [--project <name>] [--force]\n")
+		return exitUsage
+	}
+	branch := fs.Arg(0)
+	proj, err := resolveFeatureProject(*project)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	runner := feature.NewLocalHookRunner("", stderr)
+	if err := feature.Finish(context.Background(), proj, branch, *force, runner); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	fmt.Fprintf(stdout, "removed: %s\n", branch)
+	return exitOK
+}
+
+func featureLs(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("feature ls", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	project := fs.String("project", "", "project name (default: detect from cwd)")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "usage: coda feature ls [--project <name>]\n")
+		return exitUsage
+	}
+	proj, err := resolveFeatureProject(*project)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	wts, err := feature.List(context.Background(), proj)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "BRANCH\tBASE\tPATH")
+	for _, w := range wts {
+		base := w.Base
+		if base == "" {
+			base = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", w.Branch, base, w.Path)
+	}
+	if err := tw.Flush(); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	return exitOK
+}
+
+func resolveFeatureProject(name string) (*feature.Project, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("getwd: %w", err)
+	}
+	return feature.FindProject(cwd, name)
 }

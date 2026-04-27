@@ -112,6 +112,46 @@ func TestBoot_RequiresPurpose(t *testing.T) {
 	}
 }
 
+func TestBoot_UsesExplicitAgentName(t *testing.T) {
+	base := t.TempDir()
+	weirdConfigDir := filepath.Join(base, "not-the-agent-name")
+	layout := LayoutAt(weirdConfigDir)
+	if err := Scaffold(layout); err != nil {
+		t.Fatalf("scaffold: %v", err)
+	}
+	payload, err := Boot("ash", layout)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	if payload.AgentName != "ash" {
+		t.Errorf("AgentName = %q, want %q", payload.AgentName, "ash")
+	}
+	if payload.EnvVars["CODA_AGENT_NAME"] != "ash" {
+		t.Errorf("CODA_AGENT_NAME = %q, want %q", payload.EnvVars["CODA_AGENT_NAME"], "ash")
+	}
+}
+
+func TestBoot_RejectsNonRegularPurposeMD(t *testing.T) {
+	root := t.TempDir()
+	layout := Resolve(root, "ash")
+	if err := Scaffold(layout); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(layout.PurposeMD); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(layout.PurposeMD, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Boot("ash", layout)
+	if err == nil {
+		t.Fatalf("expected error when PURPOSE.md is a directory")
+	}
+	if !strings.Contains(err.Error(), "regular file") {
+		t.Errorf("error %q does not mention 'regular file'", err.Error())
+	}
+}
+
 func TestBoot_BuildsPayload(t *testing.T) {
 	root := t.TempDir()
 	layout := Resolve(root, "ash")

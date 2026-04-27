@@ -3,3 +3,10 @@
 *.test
 *.out
 .DS_Store
+
+# Feature session files
+IMPLEMENT.md
+AGENTS.md
+TEARDOWN.md
+.orch-meta
+*.feature-brief.md

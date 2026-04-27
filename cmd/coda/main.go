@@ -4,13 +4,18 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/evanstern/coda/internal/db"
+	"github.com/evanstern/coda/internal/messages"
 	"github.com/evanstern/coda/internal/session"
 )
 
@@ -39,6 +44,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	case "agent":
 		return runAgent(args[1:], stdout, stderr)
+	case "send":
+		return runSend(args[1:], stdout, stderr)
+	case "recv":
+		return runRecv(args[1:], stdout, stderr)
+	case "ack":
+		return runAck(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		printUsage(stdout)
 		return exitOK
@@ -57,6 +68,9 @@ func printUsage(w io.Writer) {
 	fmt.Fprintf(w, "  agent ls                         list agents\n")
 	fmt.Fprintf(w, "  agent start <name>               start an agent session\n")
 	fmt.Fprintf(w, "  agent stop <name> [--reason r]   stop the active session for an agent\n")
+	fmt.Fprintf(w, "  send <from> <to> <type> <body>   route a message\n")
+	fmt.Fprintf(w, "  recv <agent>                     list unacked messages for agent\n")
+	fmt.Fprintf(w, "  ack <id>                         mark a message acknowledged\n")
 }
 
 func runAgent(args []string, stdout, stderr io.Writer) int {
@@ -80,19 +94,35 @@ func runAgent(args []string, stdout, stderr io.Writer) int {
 }
 
 func openStore(ctx context.Context) (*sql.DB, *session.Store, error) {
-	path, err := db.DefaultPath()
+	conn, err := openDB(ctx)
 	if err != nil {
 		return nil, nil, err
+	}
+	return conn, session.NewStore(conn), nil
+}
+
+func openStores(ctx context.Context) (*sql.DB, *session.Store, *messages.Store, error) {
+	conn, err := openDB(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return conn, session.NewStore(conn), messages.NewStore(conn), nil
+}
+
+func openDB(ctx context.Context) (*sql.DB, error) {
+	path, err := db.DefaultPath()
+	if err != nil {
+		return nil, err
 	}
 	conn, err := db.Open(ctx, path)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if err := db.Migrate(ctx, conn); err != nil {
 		_ = conn.Close()
-		return nil, nil, fmt.Errorf("migrate: %w", err)
+		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	return conn, session.NewStore(conn), nil
+	return conn, nil
 }
 
 func agentNew(args []string, stdout, stderr io.Writer) int {
@@ -183,14 +213,14 @@ func agentStart(args []string, stdout, stderr io.Writer) int {
 	}
 	name := fs.Arg(0)
 	ctx := context.Background()
-	conn, store, err := openStore(ctx)
+	conn, store, msgStore, err := openStores(ctx)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
 	defer conn.Close()
 
-	return startAgent(ctx, store, defaultRegistry(), name, stdout, stderr)
+	return startAgent(ctx, store, msgStore, defaultRegistry(), name, stdout, stderr)
 }
 
 func agentStop(args []string, stdout, stderr io.Writer) int {
@@ -221,7 +251,7 @@ func defaultRegistry() *session.ProviderRegistry {
 	return session.NewProviderRegistry()
 }
 
-func startAgent(ctx context.Context, store *session.Store, reg *session.ProviderRegistry, name string, stdout, stderr io.Writer) int {
+func startAgent(ctx context.Context, store *session.Store, msgStore *messages.Store, reg *session.ProviderRegistry, name string, stdout, stderr io.Writer) int {
 	agent, err := store.GetAgent(ctx, name)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -249,6 +279,12 @@ func startAgent(ctx context.Context, store *session.Store, reg *session.Provider
 	if err := store.TransitionSession(ctx, sess.ID, session.StateCreated, session.StateStarted); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
+	}
+	if msgStore != nil {
+		router := messages.NewRouter(msgStore, store, reg)
+		if n, err := router.Drain(ctx, agent.Name); err != nil {
+			fmt.Fprintf(stderr, "warn: drain: %v (delivered=%d)\n", err, n)
+		}
 	}
 	fmt.Fprintf(stdout, "started: %s\n", sess.ID)
 	return exitOK
@@ -285,4 +321,140 @@ func stopAgent(ctx context.Context, store *session.Store, reg *session.ProviderR
 	}
 	fmt.Fprintf(stdout, "stopped: %s\n", sess.ID)
 	return exitOK
+}
+
+func runSend(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("send", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 4 {
+		fmt.Fprintf(stderr, "usage: coda send <from> <to> <type> <body>\n")
+		return exitUsage
+	}
+	from, to, typeStr, body := fs.Arg(0), fs.Arg(1), fs.Arg(2), fs.Arg(3)
+	if !json.Valid([]byte(body)) {
+		fmt.Fprintf(stderr, "error: body is not valid JSON\n")
+		return exitUserErr
+	}
+	t := messages.MessageType(typeStr)
+	if err := messages.ValidateType(t); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	ctx := context.Background()
+	conn, store, msgStore, err := openStores(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	defer conn.Close()
+	router := messages.NewRouter(msgStore, store, defaultRegistry())
+	id, delivered, err := router.Send(ctx, from, to, t, []byte(body))
+	if err != nil {
+		if id == 0 {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return exitUserErr
+		}
+		fmt.Fprintf(stderr, "warn: %v\n", err)
+	}
+	fmt.Fprintf(stdout, "sent: id=%d delivered=%t\n", id, delivered)
+	return exitOK
+}
+
+func runRecv(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("recv", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	asJSON := fs.Bool("json", false, "emit JSON array instead of table")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintf(stderr, "usage: coda recv <agent> [--json]\n")
+		return exitUsage
+	}
+	name := fs.Arg(0)
+	ctx := context.Background()
+	conn, _, msgStore, err := openStores(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	defer conn.Close()
+	rows, err := msgStore.ListUnacked(ctx, name)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	if *asJSON {
+		out, err := json.Marshal(rows)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return exitUserErr
+		}
+		fmt.Fprintln(stdout, string(out))
+		return exitOK
+	}
+	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tFROM\tTYPE\tCREATED\tDELIVERED\tACKED\tBODY-PREVIEW")
+	for _, m := range rows {
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			m.ID, m.Sender, m.Type,
+			m.CreatedAt.Format("2006-01-02 15:04:05"),
+			yesNo(m.DeliveredAt != nil), yesNo(m.AckedAt != nil),
+			bodyPreview(m.Body))
+	}
+	if err := tw.Flush(); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	return exitOK
+}
+
+func runAck(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("ack", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintf(stderr, "usage: coda ack <id>\n")
+		return exitUsage
+	}
+	id, err := strconv.ParseInt(fs.Arg(0), 10, 64)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: invalid id: %v\n", err)
+		return exitUserErr
+	}
+	ctx := context.Background()
+	conn, _, msgStore, err := openStores(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	defer conn.Close()
+	if err := msgStore.MarkAcked(ctx, id); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	fmt.Fprintf(stdout, "acked: %d\n", id)
+	return exitOK
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
+
+func bodyPreview(body []byte) string {
+	const maxLen = 60
+	s := strings.ReplaceAll(string(body), "\n", `\n`)
+	s = strings.TrimRight(s, " \t")
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+	return s
 }

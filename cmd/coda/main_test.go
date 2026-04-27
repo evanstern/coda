@@ -5,11 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/evanstern/coda/internal/db"
+	"github.com/evanstern/coda/internal/messages"
 	"github.com/evanstern/coda/internal/session"
 	_ "modernc.org/sqlite"
 )
@@ -39,7 +41,14 @@ func (s *stubProvider) Attach(_ string) error { return nil }
 
 func newTestStore(t *testing.T) *session.Store {
 	t.Helper()
-	d, err := sql.Open("sqlite", "file::memory:?cache=shared&_pragma=foreign_keys(1)")
+	store, _ := newTestStores(t)
+	return store
+}
+
+func newTestStores(t *testing.T) (*session.Store, *messages.Store) {
+	t.Helper()
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_pragma=foreign_keys(1)", t.Name())
+	d, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -48,7 +57,7 @@ func newTestStore(t *testing.T) *session.Store {
 	if err := db.Migrate(context.Background(), d); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return session.NewStore(d)
+	return session.NewStore(d), messages.NewStore(d)
 }
 
 func TestStartAgentNoProvider(t *testing.T) {
@@ -59,7 +68,7 @@ func TestStartAgentNoProvider(t *testing.T) {
 	}
 	reg := session.NewProviderRegistry()
 	var stdout, stderr bytes.Buffer
-	code := startAgent(ctx, store, reg, "lonely", &stdout, &stderr)
+	code := startAgent(ctx, store, nil, reg, "lonely", &stdout, &stderr)
 	if code != exitUserErr {
 		t.Fatalf("expected exit %d, got %d (stderr=%q)", exitUserErr, code, stderr.String())
 	}
@@ -76,7 +85,7 @@ func TestStartAgentUnregisteredProvider(t *testing.T) {
 	}
 	reg := session.NewProviderRegistry()
 	var stdout, stderr bytes.Buffer
-	code := startAgent(ctx, store, reg, "a", &stdout, &stderr)
+	code := startAgent(ctx, store, nil, reg, "a", &stdout, &stderr)
 	if code != exitUserErr {
 		t.Fatalf("expected exit %d, got %d", exitUserErr, code)
 	}
@@ -96,7 +105,7 @@ func TestStartStopAgentHappyPath(t *testing.T) {
 	reg.Register("stub", provider)
 
 	var stdout, stderr bytes.Buffer
-	if code := startAgent(ctx, store, reg, "a", &stdout, &stderr); code != exitOK {
+	if code := startAgent(ctx, store, nil, reg, "a", &stdout, &stderr); code != exitOK {
 		t.Fatalf("start: code=%d stderr=%q", code, stderr.String())
 	}
 	if !strings.HasPrefix(stdout.String(), "started: ") {
@@ -134,6 +143,82 @@ func TestStartStopAgentHappyPath(t *testing.T) {
 	}
 }
 
+func TestSendRecvAck_EndToEnd(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"agent", "new", "ash"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("agent new ash: code=%d stderr=%q", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"agent", "new", "zach"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("agent new zach: code=%d stderr=%q", code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"send", "ash", "zach", "note", `{"text":"hello"}`}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("send: code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "sent: id=1 delivered=false") {
+		t.Fatalf("unexpected send stdout: %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"recv", "zach"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("recv: code=%d stderr=%q", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "ID") || !strings.Contains(out, `{"text":"hello"}`) {
+		t.Fatalf("recv missing row: %q", out)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"ack", "1"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("ack: code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "acked: 1") {
+		t.Fatalf("unexpected ack stdout: %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"recv", "zach"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("recv after ack: code=%d", code)
+	}
+	post := stdout.String()
+	if strings.Contains(post, `{"text":"hello"}`) {
+		t.Fatalf("expected no rows after ack, got %q", post)
+	}
+}
+
+func TestSend_InvalidBodyAndType(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"agent", "new", "ash"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("agent new: %d %q", code, stderr.String())
+	}
+	if code := run([]string{"agent", "new", "zach"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("agent new: %d %q", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"send", "ash", "zach", "note", "not-json"}, &stdout, &stderr); code != exitUserErr {
+		t.Fatalf("expected exitUserErr for bad json, got %d", code)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"send", "ash", "zach", "bogus", `{}`}, &stdout, &stderr); code != exitUserErr {
+		t.Fatalf("expected exitUserErr for bad type, got %d", code)
+	}
+}
+
 func TestStopAgentRollsBackWhenProviderStopFails(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -145,7 +230,7 @@ func TestStopAgentRollsBackWhenProviderStopFails(t *testing.T) {
 	reg.Register("stub", provider)
 
 	var stdout, stderr bytes.Buffer
-	if code := startAgent(ctx, store, reg, "a", &stdout, &stderr); code != exitOK {
+	if code := startAgent(ctx, store, nil, reg, "a", &stdout, &stderr); code != exitOK {
 		t.Fatalf("start: code=%d stderr=%q", code, stderr.String())
 	}
 	active, err := store.GetActiveSession(ctx, "a")

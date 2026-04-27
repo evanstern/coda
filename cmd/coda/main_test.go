@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -413,5 +416,111 @@ func TestRecv_JSONBodyNotBase64(t *testing.T) {
 	}
 	if body.Text != "hello" {
 		t.Fatalf("body.text=%q want %q", body.Text, "hello")
+	}
+}
+
+func makeFeatureTestProject(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	bare := filepath.Join(root, ".bare")
+	gitMust(t, root, "init", "--bare", "--initial-branch=main", ".bare")
+	if err := os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: ./.bare\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitMust(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
+	gitMust(t, root, "worktree", "add", filepath.Join(root, "main"))
+	mainWT := filepath.Join(root, "main")
+	gitMust(t, mainWT, "config", "user.email", "test@example.com")
+	gitMust(t, mainWT, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(mainWT, "README.md"), []byte("# test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitMust(t, mainWT, "add", "README.md")
+	gitMust(t, mainWT, "commit", "-m", "init")
+	return root
+}
+
+func gitMust(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func TestFeature_StartLsFinish_RoundTrip(t *testing.T) {
+	root := makeFeatureTestProject(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(filepath.Join(root, "main")); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"feature", "start", "feat-x"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("feature start: code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "created: feat-x at ") {
+		t.Fatalf("unexpected start stdout: %q", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "feat-x")); err != nil {
+		t.Fatalf("worktree not created: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"feature", "ls"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("feature ls: code=%d stderr=%q", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "feat-x") {
+		t.Fatalf("ls missing feat-x: %q", out)
+	}
+	if strings.Contains(out, " main ") || strings.Contains(out, "\tmain\t") {
+		t.Fatalf("ls should exclude main worktree: %q", out)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"feature", "finish", "feat-x"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("feature finish: code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "removed: feat-x") {
+		t.Fatalf("unexpected finish stdout: %q", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "feat-x")); !os.IsNotExist(err) {
+		t.Fatalf("worktree path still exists: %v", err)
+	}
+}
+
+func TestFeature_FinishUncommittedNoForce(t *testing.T) {
+	root := makeFeatureTestProject(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(filepath.Join(root, "main")); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"feature", "start", "dirty"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("start: %d %q", code, stderr.String())
+	}
+	if err := os.WriteFile(filepath.Join(root, "dirty", "scratch.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"feature", "finish", "dirty"}, &stdout, &stderr); code != exitUserErr {
+		t.Fatalf("expected exitUserErr, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "uncommitted") {
+		t.Fatalf("expected uncommitted error: %q", stderr.String())
 	}
 }

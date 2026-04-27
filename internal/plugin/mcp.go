@@ -100,7 +100,7 @@ type rpcError struct {
 
 type rpcResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
+	ID      json.RawMessage `json:"id"`
 	Result  any             `json:"result,omitempty"`
 	Error   *rpcError       `json:"error,omitempty"`
 }
@@ -134,11 +134,19 @@ func (s *MCPServer) Serve(ctx context.Context, in io.Reader, out io.Writer) erro
 func (s *MCPServer) handle(ctx context.Context, line []byte) *rpcResponse {
 	var req rpcRequest
 	if err := json.Unmarshal(line, &req); err != nil {
-		return &rpcResponse{JSONRPC: "2.0", Error: &rpcError{Code: ErrParse, Message: "parse error: " + err.Error()}}
+		return &rpcResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: ErrParse, Message: "parse error: " + err.Error()}}
 	}
 	if req.JSONRPC != "2.0" {
-		return &rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: ErrInvalidRequest, Message: "jsonrpc must be \"2.0\""}}
+		id := req.ID
+		if len(id) == 0 {
+			id = json.RawMessage("null")
+		}
+		return &rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: ErrInvalidRequest, Message: "jsonrpc must be \"2.0\""}}
 	}
+	// JSON-RPC 2.0 notifications (no id field) get no response. An
+	// explicit `"id": null` is a request, not a notification — but
+	// MCP tooling never sends that, so treating both as notifications
+	// is acceptable for now.
 	if len(req.ID) == 0 {
 		return nil
 	}

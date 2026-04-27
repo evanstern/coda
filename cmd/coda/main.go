@@ -383,7 +383,7 @@ func agentStart(args []string, stdout, stderr io.Writer) int {
 	}
 	defer conn.Close()
 
-	return startAgent(ctx, store, msgStore, defaultRegistry(), name, stdout, stderr)
+	return startAgent(ctx, store, msgStore, defaultRegistry(ctx), name, stdout, stderr)
 }
 
 func agentStop(args []string, stdout, stderr io.Writer) int {
@@ -405,24 +405,27 @@ func agentStop(args []string, stdout, stderr io.Writer) int {
 		return exitUserErr
 	}
 	defer conn.Close()
-	return stopAgent(ctx, store, defaultRegistry(), name, *reason, stdout, stderr)
+	return stopAgent(ctx, store, defaultRegistry(ctx), name, *reason, stdout, stderr)
 }
 
 // defaultRegistry returns the process-wide provider registry,
 // populated from plugins discovered under the default plugins
-// directory. Failures during plugin load are written to stderr but
-// never abort startup; an empty registry is still useful (the user
-// just gets "no provider registered" at agent start time).
-func defaultRegistry() *session.ProviderRegistry {
+// directory. Each registered SubprocessProvider is bound to ctx so
+// CLI cancellation propagates to plugin subprocesses. Failures
+// during plugin load are written to stderr but never abort startup;
+// an empty registry is still useful (the user just gets "no
+// provider registered" at agent start time).
+func defaultRegistry(ctx context.Context) *session.ProviderRegistry {
 	reg := session.NewProviderRegistry()
-	plugins, err := plugin.NewLoader("", os.Stderr).Load(context.Background())
+	plugins, err := plugin.NewLoader("", os.Stderr).Load(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warn: load plugins: %v\n", err)
 		return reg
 	}
 	for _, pl := range plugins {
 		for name, spec := range pl.Manifest.Provides.Providers {
-			reg.Register(name, plugin.NewSubprocessProvider(name, pl.Root, spec.Exec))
+			p := plugin.NewSubprocessProvider(name, pl.Root, spec.Exec).WithContext(ctx)
+			reg.Register(name, p)
 		}
 	}
 	return reg
@@ -430,8 +433,8 @@ func defaultRegistry() *session.ProviderRegistry {
 
 // loadPluginsForHooks loads plugins for hook dispatch. Errors warn to
 // stderr; a partial set is still useful.
-func loadPluginsForHooks(stderr io.Writer) []plugin.Plugin {
-	plugins, err := plugin.NewLoader("", stderr).Load(context.Background())
+func loadPluginsForHooks(ctx context.Context, stderr io.Writer) []plugin.Plugin {
+	plugins, err := plugin.NewLoader("", stderr).Load(ctx)
 	if err != nil {
 		fmt.Fprintf(stderr, "warn: load plugins: %v\n", err)
 		return nil
@@ -538,7 +541,7 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 		return exitUserErr
 	}
 	defer conn.Close()
-	router := messages.NewRouter(msgStore, store, defaultRegistry())
+	router := messages.NewRouter(msgStore, store, defaultRegistry(ctx))
 	id, delivered, err := router.Send(ctx, from, to, t, []byte(body))
 	if err != nil {
 		if id == 0 {
@@ -740,8 +743,9 @@ func featureStart(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
-	runner := plugin.NewHookRunner("", loadPluginsForHooks(stderr), stderr)
-	wt, err := feature.Start(context.Background(), proj, branch, *base, runner)
+	ctx := context.Background()
+	runner := plugin.NewHookRunner("", loadPluginsForHooks(ctx, stderr), stderr)
+	wt, err := feature.Start(ctx, proj, branch, *base, runner)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
@@ -768,8 +772,9 @@ func featureFinish(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
-	runner := plugin.NewHookRunner("", loadPluginsForHooks(stderr), stderr)
-	if err := feature.Finish(context.Background(), proj, branch, *force, runner); err != nil {
+	ctx := context.Background()
+	runner := plugin.NewHookRunner("", loadPluginsForHooks(ctx, stderr), stderr)
+	if err := feature.Finish(ctx, proj, branch, *force, runner); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}

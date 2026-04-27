@@ -97,8 +97,9 @@ func (r *CommandRegistry) Names() []string {
 }
 
 // Dispatch runs the plugin command with args. Stdin/stdout/stderr
-// pass through; the plugin's exit code is returned (0 on success,
-// the underlying ExitError code otherwise; -1 on spawn failure).
+// pass through. Exit code: 0 on success; the plugin's exit code
+// from a non-zero exit; 1 on spawn failure (with the error printed
+// to stderr); 2 if name doesn't resolve to a registered command.
 func (r *CommandRegistry) Dispatch(ctx context.Context, name string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	reg, ok := r.Lookup(name)
 	if !ok {

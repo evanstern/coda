@@ -141,6 +141,13 @@ func TestMCP_ParseError(t *testing.T) {
 	if int(errObj["code"].(float64)) != ErrParse {
 		t.Fatalf("code=%v", errObj["code"])
 	}
+	id, ok := resp[0]["id"]
+	if !ok {
+		t.Fatalf("parse-error response must include id field per JSON-RPC 2.0; missing")
+	}
+	if id != nil {
+		t.Fatalf("parse-error id should be null, got %v", id)
+	}
 }
 
 func TestMCP_MethodNotFound(t *testing.T) {

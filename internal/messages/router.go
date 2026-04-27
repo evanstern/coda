@@ -36,19 +36,15 @@ func (r *Router) Send(ctx context.Context, sender, recipient string, t MessageTy
 	if _, err := r.Sessions.GetAgent(ctx, recipient); err != nil {
 		return 0, false, err
 	}
-	id, err := r.Messages.Insert(ctx, sender, recipient, t, body)
+	stored, err := r.Messages.Insert(ctx, sender, recipient, t, body)
 	if err != nil {
 		return 0, false, err
 	}
-	stored, err := r.Messages.Get(ctx, id)
-	if err != nil {
-		return id, false, err
-	}
 	delivered, err := r.deliver(ctx, *stored)
 	if err != nil {
-		return id, false, err
+		return stored.ID, false, err
 	}
-	return id, delivered, nil
+	return stored.ID, delivered, nil
 }
 
 // Drain delivers all undelivered messages for the given recipient via

@@ -199,11 +199,11 @@ func TestDrain_PartialFailure(t *testing.T) {
 	ctx := context.Background()
 	var ids []int64
 	for i := 0; i < 3; i++ {
-		id, err := fix.msgs.Insert(ctx, "ash", "zach", messages.TypeNote, []byte(`{}`))
+		m, err := fix.msgs.Insert(ctx, "ash", "zach", messages.TypeNote, []byte(`{}`))
 		if err != nil {
 			t.Fatal(err)
 		}
-		ids = append(ids, id)
+		ids = append(ids, m.ID)
 	}
 	fix.provider.deliverFn = func(_ string, msg session.Message) (bool, error) {
 		if msg.ID == fmt.Sprintf("%d", ids[1]) {

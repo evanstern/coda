@@ -309,3 +309,109 @@ func TestStopAgentRollsBackWhenProviderStopFails(t *testing.T) {
 		t.Fatalf("expected stop_reason cleared after rollback, got %q", got.StopReason)
 	}
 }
+
+func TestSend_ExitCodeOnTransportError(t *testing.T) {
+	store, msgStore := newTestStores(t)
+	ctx := context.Background()
+	if err := store.CreateAgent(ctx, session.Agent{Name: "ash", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateAgent(ctx, session.Agent{Name: "zach", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	sess := session.Session{
+		ID:        session.NewSessionID(),
+		AgentName: "zach",
+		Provider:  "stub",
+		State:     session.StateCreated,
+	}
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.TransitionSession(ctx, sess.ID, session.StateCreated, session.StateStarted); err != nil {
+		t.Fatal(err)
+	}
+	reg := session.NewProviderRegistry()
+	reg.Register("stub", &failingProvider{})
+	router := messages.NewRouter(msgStore, store, reg)
+	id, delivered, err := router.Send(ctx, "ash", "zach", messages.TypeNote, []byte(`{}`))
+	if err == nil {
+		t.Fatalf("expected error from failing transport")
+	}
+	if id == 0 {
+		t.Fatalf("expected message persisted before failure")
+	}
+	if delivered {
+		t.Fatalf("expected delivered=false")
+	}
+	exit := sendExitCode(id, err)
+	if exit != exitUserErr {
+		t.Fatalf("expected exit %d on transport error, got %d", exitUserErr, exit)
+	}
+	if got := sendExitCode(0, errors.New("validation")); got != exitUserErr {
+		t.Fatalf("expected exit %d on pre-insert error, got %d", exitUserErr, got)
+	}
+	if got := sendExitCode(42, nil); got != exitOK {
+		t.Fatalf("expected exit %d on success, got %d", exitOK, got)
+	}
+}
+
+type failingProvider struct{ stubProvider }
+
+func (f *failingProvider) Deliver(_ string, _ session.Message) (bool, error) {
+	return false, errors.New("transport boom")
+}
+
+func TestRecv_UnknownAgent(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"recv", "ghost"}, &stdout, &stderr); code != exitUserErr {
+		t.Fatalf("expected exitUserErr for unknown agent, got %d (stderr=%q)", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown agent") {
+		t.Fatalf("expected unknown-agent error, got %q", stderr.String())
+	}
+}
+
+func TestRecv_JSONBodyNotBase64(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"agent", "new", "ash"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("new ash: %d %q", code, stderr.String())
+	}
+	if code := run([]string{"agent", "new", "zach"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("new zach: %d %q", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"send", "ash", "zach", "note", `{"text":"hello"}`}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("send: %d %q", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"recv", "--json", "zach"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("recv --json: %d %q", code, stderr.String())
+	}
+	var rows []struct {
+		ID   int64           `json:"id"`
+		Body json.RawMessage `json:"body"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
+		t.Fatalf("decode recv json: %v\nraw: %s", err, stdout.String())
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(rows[0].Body, &body); err != nil {
+		t.Fatalf("body should be embedded JSON not base64: %v\nraw: %s", err, rows[0].Body)
+	}
+	if body.Text != "hello" {
+		t.Fatalf("body.text=%q want %q", body.Text, "hello")
+	}
+}

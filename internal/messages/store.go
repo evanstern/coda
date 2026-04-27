@@ -21,22 +21,22 @@ func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-// Insert persists a new message. Returns the assigned ID.
-func (s *Store) Insert(ctx context.Context, sender, recipient string, t MessageType, body []byte) (int64, error) {
+// Insert persists a new message and returns the populated row,
+// including the assigned ID and server-side created_at. Saves a
+// roundtrip versus inserting and re-reading.
+func (s *Store) Insert(ctx context.Context, sender, recipient string, t MessageType, body []byte) (*Stored, error) {
 	if err := ValidateType(t); err != nil {
-		return 0, err
+		return nil, err
 	}
-	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO messages(sender, recipient, type, body) VALUES (?, ?, ?, ?)`,
-		sender, recipient, string(t), string(body))
+	row := s.db.QueryRowContext(ctx,
+		`INSERT INTO messages(sender, recipient, type, body) VALUES (?, ?, ?, ?)
+		 RETURNING id, sender, recipient, type, body, created_at, delivered_at, acked_at`,
+		sender, recipient, string(t), body)
+	m, err := scanStoredRow(row)
 	if err != nil {
-		return 0, fmt.Errorf("insert message: %w", err)
+		return nil, fmt.Errorf("insert message: %w", err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("last insert id: %w", err)
-	}
-	return id, nil
+	return &m, nil
 }
 
 // MarkDelivered sets delivered_at to now() for the given id.
@@ -145,15 +145,16 @@ func scanStored(row rowScanner) (Stored, error) {
 
 func scanStoredFields(row rowScanner) (Stored, error) {
 	var (
-		m                        Stored
-		typeStr, body, createdAt string
-		deliveredAt, ackedAt     sql.NullString
+		m                    Stored
+		typeStr, createdAt   string
+		body                 []byte
+		deliveredAt, ackedAt sql.NullString
 	)
 	if err := row.Scan(&m.ID, &m.Sender, &m.Recipient, &typeStr, &body, &createdAt, &deliveredAt, &ackedAt); err != nil {
 		return Stored{}, fmt.Errorf("scan message: %w", err)
 	}
 	m.Type = MessageType(typeStr)
-	m.Body = []byte(body)
+	m.Body = body
 	ts, err := parseSQLiteTime(createdAt)
 	if err != nil {
 		return Stored{}, fmt.Errorf("parse created_at: %w", err)

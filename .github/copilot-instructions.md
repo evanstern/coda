@@ -44,7 +44,7 @@ from that run.
 | Vet         | `go vet ./...`       | <1s    | Always run. No output on success. |
 | Test        | `go test ./...`      | <1s    | Packages with no tests print `[no test files]`; not a failure. |
 | Tidy check  | `go mod tidy`        | <1s    | Must leave `go.mod` and `go.sum` unchanged. See trap 2. |
-| Binary      | `go build -o coda ./cmd/coda && ./coda version` | <1s | Prints `dev` unless `-ldflags "-X main.Version=..."` is set. |
+| Binary      | `go build -o coda-dev ./cmd/coda && ./coda-dev version` | <1s | Prints `dev` unless `-ldflags "-X main.Version=..."` is set (the install script does this). |
 
 **Minimum gate before opening a PR:**
 
@@ -58,7 +58,7 @@ focus card explicitly asks for them.
 
 ### First-run side effects
 
-`coda version` is pure; it does not touch disk. `coda agent ...`
+`coda-dev version` is pure; it does not touch disk. `coda-dev agent ...`
 commands open or create `$XDG_STATE_HOME/coda/coda.db` (default
 `~/.local/state/coda/coda.db`) and run pending migrations. The
 containing directory is created if missing.

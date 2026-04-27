@@ -81,12 +81,14 @@ func (s *Store) ListUnacked(ctx context.Context, recipient string) ([]Stored, er
 		   ORDER BY id`, recipient)
 }
 
-// ListUndelivered returns all undelivered messages for recipient,
-// oldest first. Used by drain-on-start.
+// ListUndelivered returns all undelivered, unacked messages for
+// recipient, oldest first. Used by drain-on-start. Acked messages
+// are skipped even if they were never delivered, so a manually
+// acked row does not get re-routed.
 func (s *Store) ListUndelivered(ctx context.Context, recipient string) ([]Stored, error) {
 	return s.listWhere(ctx,
 		`SELECT id, sender, recipient, type, body, created_at, delivered_at, acked_at
-		   FROM messages WHERE recipient = ? AND delivered_at IS NULL
+		   FROM messages WHERE recipient = ? AND delivered_at IS NULL AND acked_at IS NULL
 		   ORDER BY id`, recipient)
 }
 

@@ -1,0 +1,3 @@
+Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
+opencode server listening on http://127.0.0.1:4212
+opencode-claude-auth: Claude credentials are expired and could not be refreshed. Run `claude` to re-authenticate.

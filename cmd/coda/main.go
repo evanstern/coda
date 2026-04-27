@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/evanstern/coda/internal/db"
 	"github.com/evanstern/coda/internal/messages"
@@ -388,7 +389,7 @@ func runRecv(args []string, stdout, stderr io.Writer) int {
 		return exitUserErr
 	}
 	if *asJSON {
-		out, err := json.Marshal(rows)
+		out, err := json.Marshal(toJSONRows(rows))
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return exitUserErr
@@ -447,6 +448,39 @@ func yesNo(b bool) string {
 		return "yes"
 	}
 	return "no"
+}
+
+type recvJSONRow struct {
+	ID          int64           `json:"id"`
+	Sender      string          `json:"sender"`
+	Recipient   string          `json:"recipient"`
+	Type        string          `json:"type"`
+	Body        json.RawMessage `json:"body"`
+	CreatedAt   time.Time       `json:"created_at"`
+	DeliveredAt *time.Time      `json:"delivered_at,omitempty"`
+	AckedAt     *time.Time      `json:"acked_at,omitempty"`
+}
+
+func toJSONRows(rows []messages.Stored) []recvJSONRow {
+	out := make([]recvJSONRow, len(rows))
+	for i, m := range rows {
+		body := json.RawMessage(m.Body)
+		if !json.Valid(body) {
+			b, _ := json.Marshal(string(m.Body))
+			body = b
+		}
+		out[i] = recvJSONRow{
+			ID:          m.ID,
+			Sender:      m.Sender,
+			Recipient:   m.Recipient,
+			Type:        string(m.Type),
+			Body:        body,
+			CreatedAt:   m.CreatedAt,
+			DeliveredAt: m.DeliveredAt,
+			AckedAt:     m.AckedAt,
+		}
+	}
+	return out
 }
 
 func bodyPreview(body []byte) string {

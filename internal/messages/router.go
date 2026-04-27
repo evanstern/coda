@@ -53,7 +53,7 @@ func (r *Router) Send(ctx context.Context, sender, recipient string, t MessageTy
 
 // Drain delivers all undelivered messages for the given recipient via
 // the registered provider for that recipient's active session. Used
-// by `coda agent start` after the session transitions to running.
+// by `coda agent start` after the session transitions to started.
 // Best-effort: returns the number successfully delivered and the
 // first error if any.
 func (r *Router) Drain(ctx context.Context, recipient string) (int, error) {

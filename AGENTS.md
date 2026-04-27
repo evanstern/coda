@@ -1,3 +1,45 @@
+# FEATURE SESSION
+
+You are a feature implementation agent, NOT the orchestrator.
+Read IMPLEMENT.md for your task brief.
+When you receive "read @IMPLEMENT.md and execute", start immediately.
+Report "PR ready: <url>" when done.
+
+## Teardown report (required)
+
+Before the feature session ends, write a self-report to `TEARDOWN.md` at
+the worktree root. The pre-feature-teardown hook will deliver it to the
+orchestrator's persistent inbox. Use this template verbatim and fill in
+every section; use `- None` when a section has nothing to report.
+
+```markdown
+# Teardown report
+
+status: completed | partial | failed
+pr: <url or "none">
+
+## What got done
+- ...
+
+## What did not get done
+- ...
+
+## Decisions made
+- ...
+
+## Issues / surprises / workarounds
+- ...
+
+## Notes for the orchestrator
+- ...
+```
+
+If you do not write `TEARDOWN.md`, the teardown hook still delivers a
+minimal auto-generated report, but the orchestrator loses the implementation
+context only you have. Always write it.
+
+---
+
 # AGENTS.md -- coda
 
 Project context for agents and human contributors.
@@ -73,7 +115,8 @@ before inferring.
 
 ## Status
 
-v3 scaffold. Session/identity/messages/plugin/feature/db packages are
-stubs. `coda-dev version` is the only working command (post-install).
+v3 scaffold. Session, db, and messaging primitives are landed; identity
+/plugin/feature packages are still stubs. `coda agent new/ls/start/stop`
+and `coda send/recv/ack` are wired up.
 
 Install: `./scripts/install.sh` (drops `coda-dev` in `$XDG_BIN_HOME`).

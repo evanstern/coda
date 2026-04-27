@@ -33,8 +33,8 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count schema_migrations: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected 1 applied migration, got %d", count)
+	if count != 2 {
+		t.Fatalf("expected 2 applied migrations, got %d", count)
 	}
 
 	tables := map[string]bool{}
@@ -50,7 +50,7 @@ func TestMigrateIdempotent(t *testing.T) {
 		tables[n] = true
 	}
 	rows.Close()
-	for _, want := range []string{"agents", "sessions", "schema_migrations"} {
+	for _, want := range []string{"agents", "sessions", "messages", "schema_migrations"} {
 		if !tables[want] {
 			t.Errorf("expected table %q to exist", want)
 		}

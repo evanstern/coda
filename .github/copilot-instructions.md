@@ -104,7 +104,7 @@ internal/db/           SQLite open + numbered migrations
 internal/db/migrations numbered *.sql files, //go:embed, forward-only
 internal/session/      Agent, Session, Store, Provider interface, ULID IDs
 internal/identity/     (stub) PURPOSE.md / MEMORY.md / PROJECT.md
-internal/messages/     (stub) typed messaging primitives
+internal/messages/     typed messaging primitives (send/recv/ack, routing)
 internal/orch/         (stub) orchestrator-specific logic
 internal/plugin/       (stub) plugin host, plugin.json, MCP server
 internal/feature/      (stub) worktree lifecycle

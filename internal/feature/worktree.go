@@ -25,10 +25,10 @@ type HookEnv = map[string]string
 
 // Hook event names. v2-compatible.
 const (
-	EventPreCreate    = "pre-feature-create"
-	EventPostCreate   = "post-feature-create"
-	EventPreTeardown  = "pre-feature-teardown"
-	EventPostTeardown = "post-feature-finish"
+	EventPreCreate   = "pre-feature-create"
+	EventPostCreate  = "post-feature-create"
+	EventPreTeardown = "pre-feature-teardown"
+	EventPostFinish  = "post-feature-finish"
 )
 
 // Start creates a new worktree at <project.Root>/<branch>/ from base.
@@ -133,13 +133,14 @@ func Finish(ctx context.Context, project *Project, branch string, force bool, ru
 	}
 
 	if runner != nil {
-		_ = runner.Run(ctx, EventPostTeardown, env)
+		_ = runner.Run(ctx, EventPostFinish, env)
 	}
 	return nil
 }
 
 // List returns active feature worktrees, excluding the bare repo's
 // internal worktree and the project's default-branch worktree.
+// Detached worktrees (no branch ref) are also skipped.
 func List(ctx context.Context, project *Project) ([]Worktree, error) {
 	if project == nil {
 		return nil, errors.New("project is nil")
@@ -148,6 +149,10 @@ func List(ctx context.Context, project *Project) ([]Worktree, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git worktree list: %w: %s", err, strings.TrimSpace(out))
 	}
+	// Default-branch detection is best-effort here: some projects (e.g.
+	// freshly inited bare repo with no remote and no branches) won't have
+	// one yet. If we can't resolve it, skip the default-path filter
+	// rather than fail the whole listing.
 	defaultBranch, _ := detectDefaultBranch(ctx, project.Root)
 	defaultPath := ""
 	if defaultBranch != "" {
@@ -155,14 +160,20 @@ func List(ctx context.Context, project *Project) ([]Worktree, error) {
 	}
 	barePath := filepath.Clean(filepath.Join(project.Root, ".bare"))
 
-	entries := parseWorktreeList(out)
+	entries, err := parseWorktreeList(out)
+	if err != nil {
+		return nil, fmt.Errorf("parse worktree list: %w", err)
+	}
 	result := make([]Worktree, 0, len(entries))
 	for _, e := range entries {
-		clean := filepath.Clean(e.path)
-		if clean == barePath || clean == defaultPath {
+		if e.bare || e.detached {
 			continue
 		}
-		if e.bare {
+		if e.branch == "" {
+			continue
+		}
+		clean := filepath.Clean(e.path)
+		if clean == barePath || (defaultPath != "" && clean == defaultPath) {
 			continue
 		}
 		result = append(result, Worktree{Branch: e.branch, Path: clean})
@@ -171,15 +182,16 @@ func List(ctx context.Context, project *Project) ([]Worktree, error) {
 }
 
 type worktreeEntry struct {
-	path   string
-	branch string
-	bare   bool
+	path     string
+	branch   string
+	bare     bool
+	detached bool
 }
 
 // parseWorktreeList parses the output of `git worktree list --porcelain`.
 // Blocks are separated by blank lines; each block has lines like
 // "worktree <path>", "HEAD <sha>", "branch <ref>", "bare", "detached".
-func parseWorktreeList(s string) []worktreeEntry {
+func parseWorktreeList(s string) ([]worktreeEntry, error) {
 	var entries []worktreeEntry
 	var cur worktreeEntry
 	flush := func() {
@@ -189,6 +201,7 @@ func parseWorktreeList(s string) []worktreeEntry {
 		cur = worktreeEntry{}
 	}
 	scanner := bufio.NewScanner(strings.NewReader(s))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -203,10 +216,15 @@ func parseWorktreeList(s string) []worktreeEntry {
 			cur.branch = strings.TrimPrefix(ref, "refs/heads/")
 		case line == "bare":
 			cur.bare = true
+		case line == "detached":
+			cur.detached = true
 		}
 	}
 	flush()
-	return entries
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // detectDefaultBranch resolves origin/HEAD or falls back to main, then master.

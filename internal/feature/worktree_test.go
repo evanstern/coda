@@ -156,3 +156,28 @@ func TestList_WithWorktreesExcludesMain(t *testing.T) {
 		t.Fatalf("expected alpha+beta, got %+v", wts)
 	}
 }
+
+func TestParseWorktreeList_DetachedSkippedByList(t *testing.T) {
+	p := newTestProject(t)
+	mustGit(t, p.Root, "worktree", "add", "--detach", filepath.Join(p.Root, "detached-wt"), "main")
+	if _, err := Start(context.Background(), p, "branched", "main", nil); err != nil {
+		t.Fatal(err)
+	}
+	wts, err := List(context.Background(), p)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(wts) != 1 || wts[0].Branch != "branched" {
+		t.Fatalf("expected only branched, got %+v", wts)
+	}
+}
+
+func TestParseWorktreeList_ReturnsErrorOnNoData(t *testing.T) {
+	entries, err := parseWorktreeList("")
+	if err != nil {
+		t.Fatalf("parse empty: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no entries, got %+v", entries)
+	}
+}

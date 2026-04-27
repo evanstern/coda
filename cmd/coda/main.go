@@ -674,13 +674,9 @@ func featureLs(args []string, stdout, stderr io.Writer) int {
 		return exitUserErr
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "BRANCH\tBASE\tPATH")
+	fmt.Fprintln(tw, "BRANCH\tPATH")
 	for _, w := range wts {
-		base := w.Base
-		if base == "" {
-			base = "-"
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", w.Branch, base, w.Path)
+		fmt.Fprintf(tw, "%s\t%s\n", w.Branch, w.Path)
 	}
 	if err := tw.Flush(); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)

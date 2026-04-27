@@ -88,13 +88,22 @@ func findFromCwd(cwd string) (*Project, error) {
 func validateProjectDir(dir string) error {
 	bare := filepath.Join(dir, ".bare")
 	info, err := os.Stat(bare)
-	if err != nil || !info.IsDir() {
-		return fmt.Errorf("%s: missing .bare directory", dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%s: missing .bare directory", dir)
+		}
+		return fmt.Errorf("%s: stat .bare: %w", dir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s: .bare is not a directory", dir)
 	}
 	gitFile := filepath.Join(dir, ".git")
 	contents, err := os.ReadFile(gitFile)
 	if err != nil {
-		return fmt.Errorf("%s: missing .git text-file", dir)
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%s: missing .git text-file", dir)
+		}
+		return fmt.Errorf("%s: read .git: %w", dir, err)
 	}
 	body := strings.TrimSpace(string(contents))
 	// Accept either "gitdir: ./.bare" or "gitdir: .bare" or absolute

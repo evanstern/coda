@@ -412,12 +412,28 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		if id == 0 {
 			fmt.Fprintf(stderr, "error: %v\n", err)
-			return exitUserErr
+		} else {
+			fmt.Fprintf(stderr, "error: id=%d: %v\n", id, err)
 		}
-		fmt.Fprintf(stderr, "warn: %v\n", err)
+		return sendExitCode(id, err)
 	}
 	fmt.Fprintf(stdout, "sent: id=%d delivered=%t\n", id, delivered)
-	return exitOK
+	return sendExitCode(id, nil)
+}
+
+// sendExitCode maps Router.Send results to a CLI exit code.
+//   - nil err: success.
+//   - err with id == 0: pre-insert failure (validation, unknown agent).
+//   - err with id != 0: row persisted but transport failed; non-zero exit.
+//
+// The "no active session" case returns nil err with id != 0 inside
+// Router.Send (drain handles it later) and maps to exitOK here.
+func sendExitCode(id int64, err error) int {
+	if err == nil {
+		return exitOK
+	}
+	_ = id
+	return exitUserErr
 }
 
 func runRecv(args []string, stdout, stderr io.Writer) int {
@@ -433,12 +449,20 @@ func runRecv(args []string, stdout, stderr io.Writer) int {
 	}
 	name := fs.Arg(0)
 	ctx := context.Background()
-	conn, _, msgStore, err := openStores(ctx)
+	conn, sessStore, msgStore, err := openStores(ctx)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
 	defer conn.Close()
+	if _, err := sessStore.GetAgent(ctx, name); err != nil {
+		if errors.Is(err, session.ErrNotFound) {
+			fmt.Fprintf(stderr, "error: unknown agent %q\n", name)
+			return exitUserErr
+		}
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
 	rows, err := msgStore.ListUnacked(ctx, name)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)

@@ -127,11 +127,15 @@ type BootPayload struct {
 // and env vars; it is the caller's responsibility to pass the
 // authoritative name (e.g. from the DB row).
 func Boot(agentName string, layout Layout) (BootPayload, error) {
-	if _, err := os.Stat(layout.PurposeMD); err != nil {
+	info, err := os.Stat(layout.PurposeMD)
+	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return BootPayload{}, fmt.Errorf("PURPOSE.md missing at %s", layout.PurposeMD)
 		}
 		return BootPayload{}, fmt.Errorf("stat purpose: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return BootPayload{}, fmt.Errorf("PURPOSE.md at %s is not a regular file", layout.PurposeMD)
 	}
 	files := []string{layout.PurposeMD}
 	for _, p := range []string{layout.MemoryMD, layout.ProjectMD} {

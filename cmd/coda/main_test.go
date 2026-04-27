@@ -497,6 +497,86 @@ func TestFeature_StartLsFinish_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestMCP_ServeRoundTrip(t *testing.T) {
+	pluginsDir := t.TempDir()
+	pluginRoot := filepath.Join(pluginsDir, "demo")
+	if err := os.MkdirAll(filepath.Join(pluginRoot, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+  "name": "demo",
+  "version": "0.1.0",
+  "coda": "^0.1.0",
+  "provides": {
+    "mcp_tools": {
+      "echo": {"description": "echo back stdin", "command": ["bin/echo"]}
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(pluginRoot, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "bin", "echo"), []byte("#!/bin/sh\ncat\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODA_PLUGINS_DIR", pluginsDir)
+
+	stdinPipeR, stdinPipeW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prevStdin := os.Stdin
+	os.Stdin = stdinPipeR
+	t.Cleanup(func() { os.Stdin = prevStdin })
+
+	go func() {
+		_, _ = stdinPipeW.WriteString(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}` + "\n")
+		_ = stdinPipeW.Close()
+	}()
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"mcp", "serve"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("mcp serve: code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"echo"`) {
+		t.Fatalf("expected echo tool in stdout: %q", stdout.String())
+	}
+	var resp struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v\n%s", err, stdout.String())
+	}
+	if len(resp.Result.Tools) != 1 || resp.Result.Tools[0].Name != "echo" {
+		t.Fatalf("tools=%+v", resp.Result.Tools)
+	}
+}
+
+func TestMCP_ToolsCommand(t *testing.T) {
+	pluginsDir := t.TempDir()
+	pluginRoot := filepath.Join(pluginsDir, "demo")
+	if err := os.MkdirAll(pluginRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"demo","version":"0.1.0","coda":"^0.1.0","provides":{"mcp_tools":{"echo":{"description":"e","command":["true"]}}}}`
+	if err := os.WriteFile(filepath.Join(pluginRoot, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODA_PLUGINS_DIR", pluginsDir)
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"mcp", "tools"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("mcp tools: code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "echo") || !strings.Contains(stdout.String(), "demo") {
+		t.Fatalf("missing tool/plugin: %q", stdout.String())
+	}
+}
+
 func TestFeature_FinishUncommittedNoForce(t *testing.T) {
 	root := makeFeatureTestProject(t)
 	cwd, err := os.Getwd()

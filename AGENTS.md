@@ -73,12 +73,14 @@ before inferring.
 
 ## Status
 
-v3 scaffold. Session, db, identity, messaging, and feature
-primitives are landed: `coda agent new` provisions identity dirs,
-`coda agent boot` emits a provider-ready JSON payload, `coda agent
-ls/start/stop` manage sessions, `coda send/recv/ack` carries typed
-messages between agents, and `coda feature start/finish/ls` manages
-git-worktree lifecycles with a local hook runner. The plugin host
-is still a stub.
+v3 scaffold. All five core primitives have landed: `coda agent new`
+provisions identity dirs, `coda agent boot` emits a provider-ready
+JSON payload, `coda agent ls/start/stop` manage sessions, `coda
+send/recv/ack` carries typed messages between agents, `coda feature
+start/finish/ls` manages git-worktree lifecycles, and the plugin
+host loads `plugin.json` manifests, registers subprocess providers
+into the `ProviderRegistry`, layers user and plugin hooks, dispatches
+plugin-contributed CLI commands, and exposes plugin tools through
+`coda mcp serve` (stdio JSON-RPC 2.0).
 
 Install: `./scripts/install.sh` (drops `coda-dev` in `$XDG_BIN_HOME`).

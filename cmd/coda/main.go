@@ -19,6 +19,7 @@ import (
 	"github.com/evanstern/coda/internal/feature"
 	"github.com/evanstern/coda/internal/identity"
 	"github.com/evanstern/coda/internal/messages"
+	"github.com/evanstern/coda/internal/plugin"
 	"github.com/evanstern/coda/internal/session"
 )
 
@@ -55,14 +56,111 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runAck(args[1:], stdout, stderr)
 	case "feature":
 		return runFeature(args[1:], stdout, stderr)
+	case "mcp":
+		return runMCP(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		printUsage(stdout)
 		return exitOK
 	default:
-		fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
-		printUsage(stderr)
+		return runPluginCommand(args, stdout, stderr)
+	}
+}
+
+func runPluginCommand(args []string, stdout, stderr io.Writer) int {
+	plugins, err := plugin.NewLoader("", stderr).Load(context.Background())
+	if err != nil {
+		fmt.Fprintf(stderr, "warn: load plugins: %v\n", err)
+	}
+	registry, err := plugin.BuildCommandRegistry(plugins)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	if _, ok := registry.Lookup(args[0]); ok {
+		return registry.Dispatch(context.Background(), args[0], args[1:], os.Stdin, stdout, stderr)
+	}
+	fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
+	printUsage(stderr)
+	return exitUsage
+}
+
+func runMCP(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintf(stderr, "usage: coda mcp <serve|tools>\n")
 		return exitUsage
 	}
+	switch args[0] {
+	case "serve":
+		return mcpServe(args[1:], stdout, stderr)
+	case "tools":
+		return mcpTools(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "unknown mcp subcommand: %s\n", args[0])
+		return exitUsage
+	}
+}
+
+func loadMCPServer(stderr io.Writer) (*plugin.MCPServer, error) {
+	plugins, err := plugin.NewLoader("", stderr).Load(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return plugin.NewMCPServer(plugins)
+}
+
+func mcpServe(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("mcp serve", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "usage: coda mcp serve\n")
+		return exitUsage
+	}
+	srv, err := loadMCPServer(stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	if err := srv.Serve(context.Background(), os.Stdin, stdout); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	return exitOK
+}
+
+func mcpTools(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("mcp tools", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	asJSON := fs.Bool("json", false, "emit JSON instead of table")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	srv, err := loadMCPServer(stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	if *asJSON {
+		out, err := json.MarshalIndent(srv.Tools, "", "  ")
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return exitUserErr
+		}
+		fmt.Fprintln(stdout, string(out))
+		return exitOK
+	}
+	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "NAME\tPLUGIN\tDESCRIPTION")
+	for _, t := range srv.Tools {
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", t.Name, t.Plugin, t.Description)
+	}
+	if err := tw.Flush(); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitUserErr
+	}
+	return exitOK
 }
 
 func printUsage(w io.Writer) {
@@ -80,6 +178,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintf(w, "  feature start <branch>           create a worktree from the default or given base branch\n")
 	fmt.Fprintf(w, "  feature finish <branch>          remove a worktree and delete its branch\n")
 	fmt.Fprintf(w, "  feature ls                       list active feature worktrees\n")
+	fmt.Fprintf(w, "  mcp serve                        run the stdio MCP server (plugin tools)\n")
+	fmt.Fprintf(w, "  mcp tools                        list registered MCP tools\n")
 }
 
 func runAgent(args []string, stdout, stderr io.Writer) int {
@@ -308,10 +408,35 @@ func agentStop(args []string, stdout, stderr io.Writer) int {
 	return stopAgent(ctx, store, defaultRegistry(), name, *reason, stdout, stderr)
 }
 
-// defaultRegistry returns the process-wide provider registry. Empty
-// in this PR; later cards will populate it from plugins.
+// defaultRegistry returns the process-wide provider registry,
+// populated from plugins discovered under the default plugins
+// directory. Failures during plugin load are written to stderr but
+// never abort startup; an empty registry is still useful (the user
+// just gets "no provider registered" at agent start time).
 func defaultRegistry() *session.ProviderRegistry {
-	return session.NewProviderRegistry()
+	reg := session.NewProviderRegistry()
+	plugins, err := plugin.NewLoader("", os.Stderr).Load(context.Background())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warn: load plugins: %v\n", err)
+		return reg
+	}
+	for _, pl := range plugins {
+		for name, spec := range pl.Manifest.Provides.Providers {
+			reg.Register(name, plugin.NewSubprocessProvider(name, pl.Root, spec.Exec))
+		}
+	}
+	return reg
+}
+
+// loadPluginsForHooks loads plugins for hook dispatch. Errors warn to
+// stderr; a partial set is still useful.
+func loadPluginsForHooks(stderr io.Writer) []plugin.Plugin {
+	plugins, err := plugin.NewLoader("", stderr).Load(context.Background())
+	if err != nil {
+		fmt.Fprintf(stderr, "warn: load plugins: %v\n", err)
+		return nil
+	}
+	return plugins
 }
 
 func startAgent(ctx context.Context, store *session.Store, msgStore *messages.Store, reg *session.ProviderRegistry, name string, stdout, stderr io.Writer) int {
@@ -615,7 +740,7 @@ func featureStart(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
-	runner := feature.NewLocalHookRunner("", stderr)
+	runner := plugin.NewHookRunner("", loadPluginsForHooks(stderr), stderr)
 	wt, err := feature.Start(context.Background(), proj, branch, *base, runner)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -643,7 +768,7 @@ func featureFinish(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
-	runner := feature.NewLocalHookRunner("", stderr)
+	runner := plugin.NewHookRunner("", loadPluginsForHooks(stderr), stderr)
 	if err := feature.Finish(context.Background(), proj, branch, *force, runner); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr

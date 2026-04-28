@@ -21,9 +21,10 @@ a plugin.
 1. **Session model** -- agent lifecycle (created -> started -> running
    -> stopped). Provider-delegated execution. SQLite state in
    `~/.local/state/coda/coda.db`.
-2. **Identity** -- `PURPOSE.md` + `MEMORY.md` + `PROJECT.md` per agent.
-   `coda agent new/boot`. The `coda-soul` plugin extends this with
-   `SOUL.md` (personality, voice, values) and dream/reflect cycles.
+2. **Identity** -- `PURPOSE.md` + `MEMORY.md` + `PROJECT.md` per agent,
+   plus `memory/` and `learnings/` subdirectories for dated per-day
+   entries. `coda agent new/boot`. The `coda-soul` plugin extends this
+   with `SOUL.md` (personality, voice, values) and dream/reflect cycles.
 3. **Messaging** -- typed messages (note/brief/completion/status/
    escalation) with a routing table and send/recv/ack semantics.
    Providers implement transport.
@@ -39,7 +40,8 @@ cmd/coda/              binary entrypoint and dispatcher (stdlib flag)
 internal/db/           SQLite open + numbered migrations
 internal/db/migrations numbered *.sql files, //go:embed, forward-only
 internal/session/      Agent, Session, Store, Provider interface, ULID IDs
-internal/identity/     PURPOSE.md / MEMORY.md / PROJECT.md scaffold + boot
+internal/identity/     PURPOSE.md / MEMORY.md / PROJECT.md scaffold + boot;
+                       memory/ and learnings/ per-day append + read
 internal/messages/     typed messaging primitives (send/recv/ack, routing)
 internal/orch/         (stub) orchestrator-specific logic
 internal/plugin/       (stub) plugin host, plugin.json, MCP server

@@ -463,9 +463,17 @@ func startAgent(ctx context.Context, store *session.Store, msgStore *messages.St
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
-	if _, err := provider.Start(*agent, session.ProviderConfig{}); err != nil {
+	provSessID, err := provider.Start(*agent, session.ProviderConfig{})
+	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
+	}
+	if provSessID != "" {
+		if err := store.SetProviderSessionID(ctx, sess.ID, provSessID); err != nil {
+			fmt.Fprintf(stderr, "warn: provider started but recording its session id failed: %v\n", err)
+			return exitUserErr
+		}
+		sess.ProviderSessionID = provSessID
 	}
 	if err := store.TransitionSession(ctx, sess.ID, session.StateCreated, session.StateStarted); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -502,7 +510,7 @@ func stopAgent(ctx context.Context, store *session.Store, reg *session.ProviderR
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitUserErr
 	}
-	if err := provider.Stop(sess.ID); err != nil {
+	if err := provider.Stop(sess.ProviderID()); err != nil {
 		if rbErr := store.RollbackFromStopped(ctx, sess.ID, prev); rbErr != nil {
 			fmt.Fprintf(stderr, "error: provider stop: %v; rollback: %v\n", err, rbErr)
 			return exitUserErr

@@ -23,6 +23,7 @@ import (
 type stubProvider struct {
 	startCalls int
 	stopCalls  int
+	stopSeen   []string
 	startErr   error
 	stopErr    error
 }
@@ -31,7 +32,11 @@ func (s *stubProvider) Start(a session.Agent, _ session.ProviderConfig) (string,
 	s.startCalls++
 	return "stub-" + a.Name, s.startErr
 }
-func (s *stubProvider) Stop(_ string) error { s.stopCalls++; return s.stopErr }
+func (s *stubProvider) Stop(sessionID string) error {
+	s.stopCalls++
+	s.stopSeen = append(s.stopSeen, sessionID)
+	return s.stopErr
+}
 func (s *stubProvider) Deliver(_ string, _ session.Message) (bool, error) {
 	return true, nil
 }
@@ -168,6 +173,9 @@ func TestStartStopAgentHappyPath(t *testing.T) {
 	if active.State != session.StateStarted {
 		t.Fatalf("expected started, got %s", active.State)
 	}
+	if active.ProviderSessionID != "stub-a" {
+		t.Fatalf("expected ProviderSessionID=stub-a (returned by stubProvider.Start), got %q", active.ProviderSessionID)
+	}
 
 	stdout.Reset()
 	stderr.Reset()
@@ -179,6 +187,9 @@ func TestStartStopAgentHappyPath(t *testing.T) {
 	}
 	if provider.stopCalls != 1 {
 		t.Fatalf("expected 1 stop call, got %d", provider.stopCalls)
+	}
+	if len(provider.stopSeen) != 1 || provider.stopSeen[0] != "stub-a" {
+		t.Fatalf("expected Stop called with provider session id 'stub-a', got %v", provider.stopSeen)
 	}
 	stopped, err := store.GetSession(ctx, active.ID)
 	if err != nil {

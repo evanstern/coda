@@ -105,15 +105,39 @@ func (s *Store) ListAgents(ctx context.Context) ([]Agent, error) {
 // already generated a ULID ID (see NewSessionID). Fails with a UNIQUE
 // constraint error if another non-stopped session exists for the same
 // agent (enforced by the sessions_one_active_per_agent partial index).
+//
+// ProviderSessionID is typically empty at create time; populate it
+// after Provider.Start returns via SetProviderSessionID.
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	if sess.State == "" {
 		sess.State = StateCreated
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO sessions(id, agent_name, provider, state) VALUES (?, ?, ?, ?)`,
-		sess.ID, sess.AgentName, sess.Provider, string(sess.State))
+		`INSERT INTO sessions(id, agent_name, provider, provider_session_id, state)
+		 VALUES (?, ?, ?, ?, ?)`,
+		sess.ID, sess.AgentName, sess.Provider, sess.ProviderSessionID, string(sess.State))
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
+	}
+	return nil
+}
+
+// SetProviderSessionID records the provider's native session ID on
+// an existing session row. Called after Provider.Start returns. The
+// row must exist; ErrNotFound is returned otherwise.
+func (s *Store) SetProviderSessionID(ctx context.Context, codaSessionID, providerSessionID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE sessions SET provider_session_id = ? WHERE id = ?`,
+		providerSessionID, codaSessionID)
+	if err != nil {
+		return fmt.Errorf("set provider_session_id: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
@@ -121,7 +145,7 @@ func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 // GetSession returns the session with the given ID, or ErrNotFound.
 func (s *Store) GetSession(ctx context.Context, id string) (*Session, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, agent_name, provider, state, started_at, stopped_at, stop_reason
+		`SELECT id, agent_name, provider, provider_session_id, state, started_at, stopped_at, stop_reason
 		   FROM sessions WHERE id = ?`, id)
 	return scanSession(row)
 }
@@ -130,7 +154,7 @@ func (s *Store) GetSession(ctx context.Context, id string) (*Session, error) {
 // agent, if any. Returns ErrNotFound if none.
 func (s *Store) GetActiveSession(ctx context.Context, agentName string) (*Session, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, agent_name, provider, state, started_at, stopped_at, stop_reason
+		`SELECT id, agent_name, provider, provider_session_id, state, started_at, stopped_at, stop_reason
 		   FROM sessions WHERE agent_name = ? AND state != 'stopped'
 		   LIMIT 1`, agentName)
 	return scanSession(row)
@@ -139,7 +163,7 @@ func (s *Store) GetActiveSession(ctx context.Context, agentName string) (*Sessio
 // ListSessionsForAgent returns all sessions for an agent, oldest first.
 func (s *Store) ListSessionsForAgent(ctx context.Context, agentName string) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, agent_name, provider, state, started_at, stopped_at, stop_reason
+		`SELECT id, agent_name, provider, provider_session_id, state, started_at, stopped_at, stop_reason
 		   FROM sessions WHERE agent_name = ? ORDER BY id`, agentName)
 	if err != nil {
 		return nil, fmt.Errorf("query sessions: %w", err)
@@ -152,7 +176,7 @@ func (s *Store) ListSessionsForAgent(ctx context.Context, agentName string) ([]S
 			startedAt, stoppedAt, stopReason sql.NullString
 			state                            string
 		)
-		if err := rows.Scan(&sess.ID, &sess.AgentName, &sess.Provider, &state,
+		if err := rows.Scan(&sess.ID, &sess.AgentName, &sess.Provider, &sess.ProviderSessionID, &state,
 			&startedAt, &stoppedAt, &stopReason); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}
@@ -290,7 +314,7 @@ func scanSession(row rowScanner) (*Session, error) {
 		startedAt, stoppedAt, stopReason sql.NullString
 		state                            string
 	)
-	err := row.Scan(&sess.ID, &sess.AgentName, &sess.Provider, &state,
+	err := row.Scan(&sess.ID, &sess.AgentName, &sess.Provider, &sess.ProviderSessionID, &state,
 		&startedAt, &stoppedAt, &stopReason)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

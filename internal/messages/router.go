@@ -89,7 +89,7 @@ func (r *Router) deliver(ctx context.Context, m Stored) (bool, error) {
 	if !ok {
 		return false, &session.NoProviderError{AgentName: m.Recipient, Provider: sess.Provider}
 	}
-	delivered, err := provider.Deliver(sess.ID, m.ToWire())
+	delivered, err := provider.Deliver(sess.ProviderID(), m.ToWire())
 	if err != nil {
 		return false, fmt.Errorf("provider deliver: %w", err)
 	}

@@ -226,3 +226,41 @@ func TestDrain_PartialFailure(t *testing.T) {
 		t.Fatalf("expected failed message to remain undelivered")
 	}
 }
+
+func TestSend_UsesProviderSessionIDWhenSet(t *testing.T) {
+	fix := newRouterFixture(t, true)
+	ctx := context.Background()
+	if err := fix.sessions.SetProviderSessionID(ctx, fix.recipientID, "kit-default-01HXX"); err != nil {
+		t.Fatal(err)
+	}
+	var seen string
+	fix.provider.deliverFn = func(sessionID string, msg session.Message) (bool, error) {
+		seen = sessionID
+		return true, nil
+	}
+	if _, _, err := fix.router.Send(ctx, "ash", "zach", messages.TypeNote, []byte(`{"x":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if seen != "kit-default-01HXX" {
+		t.Fatalf("expected provider to be called with provider session ID, got %q", seen)
+	}
+	if seen == fix.recipientID {
+		t.Fatalf("provider should not have received coda session ID %q", fix.recipientID)
+	}
+}
+
+func TestSend_FallsBackToCodaIDWhenProviderSessionEmpty(t *testing.T) {
+	fix := newRouterFixture(t, true)
+	ctx := context.Background()
+	var seen string
+	fix.provider.deliverFn = func(sessionID string, msg session.Message) (bool, error) {
+		seen = sessionID
+		return true, nil
+	}
+	if _, _, err := fix.router.Send(ctx, "ash", "zach", messages.TypeNote, []byte(`{"x":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if seen != fix.recipientID {
+		t.Fatalf("expected fallback to coda ID %q, got %q", fix.recipientID, seen)
+	}
+}

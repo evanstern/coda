@@ -312,3 +312,68 @@ func TestListAgents(t *testing.T) {
 		t.Fatalf("expected 3 agents, got %d", len(agents))
 	}
 }
+
+func TestSetProviderSessionID(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+	if err := store.CreateAgent(ctx, session.Agent{Name: "a", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	id := session.NewSessionID()
+	if err := store.CreateSession(ctx, session.Session{ID: id, AgentName: "a", Provider: "stub", State: session.StateCreated}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.GetSession(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ProviderSessionID != "" {
+		t.Fatalf("expected empty ProviderSessionID at create, got %q", got.ProviderSessionID)
+	}
+	if got.ProviderID() != id {
+		t.Fatalf("ProviderID() with empty ProviderSessionID should fall back to coda ID; got %q want %q", got.ProviderID(), id)
+	}
+
+	if err := store.SetProviderSessionID(ctx, id, "kit-default-01HXX"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = store.GetSession(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ProviderSessionID != "kit-default-01HXX" {
+		t.Fatalf("expected ProviderSessionID=kit-default-01HXX, got %q", got.ProviderSessionID)
+	}
+	if got.ProviderID() != "kit-default-01HXX" {
+		t.Fatalf("ProviderID() should return ProviderSessionID when populated; got %q", got.ProviderID())
+	}
+}
+
+func TestSetProviderSessionIDNotFound(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+	err := store.SetProviderSessionID(ctx, "no-such-session", "x")
+	if !errors.Is(err, session.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestSetProviderSessionIDIdempotent(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+	if err := store.CreateAgent(ctx, session.Agent{Name: "a", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	id := session.NewSessionID()
+	if err := store.CreateSession(ctx, session.Session{ID: id, AgentName: "a", Provider: "stub", State: session.StateCreated}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProviderSessionID(ctx, id, "kit-default-01HXX"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProviderSessionID(ctx, id, "kit-default-01HXX"); err != nil {
+		t.Fatalf("re-setting same value should not error (SQLite reports RowsAffected=0 for no-op): %v", err)
+	}
+}

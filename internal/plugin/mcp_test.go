@@ -97,6 +97,44 @@ func TestMCP_ToolsList(t *testing.T) {
 	if first["description"] != "echo back stdin" {
 		t.Fatalf("description=%v", first["description"])
 	}
+	schema, ok := first["inputSchema"].(map[string]any)
+	if !ok {
+		t.Fatalf("inputSchema missing or wrong type: %+v", first["inputSchema"])
+	}
+	if schema["type"] != "object" {
+		t.Fatalf("inputSchema.type=%v", schema["type"])
+	}
+}
+
+func TestMCP_ToolsList_DefaultsInputSchema(t *testing.T) {
+	plugins := []Plugin{{
+		Root: t.TempDir(),
+		Manifest: Manifest{
+			Name: "noschema",
+			Provides: Provides{
+				MCPTools: map[string]MCPTool{
+					"bare": {
+						Description: "tool with no declared schema",
+						Command:     []string{"bin/whatever"},
+					},
+				},
+			},
+		},
+	}}
+	srv, err := NewMCPServer(plugins)
+	if err != nil {
+		t.Fatalf("NewMCPServer: %v", err)
+	}
+	resp := roundTrip(t, srv, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`+"\n")
+	tools := resp[0]["result"].(map[string]any)["tools"].([]any)
+	first := tools[0].(map[string]any)
+	schema, ok := first["inputSchema"].(map[string]any)
+	if !ok {
+		t.Fatalf("inputSchema missing for tool with no declared schema: %+v", first)
+	}
+	if schema["type"] != "object" {
+		t.Fatalf("default inputSchema.type=%v, want object", schema["type"])
+	}
 }
 
 func TestMCP_ToolsCall(t *testing.T) {

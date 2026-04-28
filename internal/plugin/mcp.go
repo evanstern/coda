@@ -183,8 +183,13 @@ func (s *MCPServer) handleToolsList(req rpcRequest) *rpcResponse {
 		if t.Description != "" {
 			entry["description"] = t.Description
 		}
+		// MCP requires inputSchema on every tool. Default to an
+		// empty object schema when the manifest is silent so strict
+		// clients (e.g. opencode) don't reject the tools/list reply.
 		if t.InputSchema != nil {
 			entry["inputSchema"] = t.InputSchema
+		} else {
+			entry["inputSchema"] = map[string]any{"type": "object"}
 		}
 		out = append(out, entry)
 	}

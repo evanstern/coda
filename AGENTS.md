@@ -209,6 +209,27 @@ containing directory is created if missing.
 - **Report `PR ready: <url>` as your final line.** The orchestrator
   watches for this pattern to know the card is complete.
 
+## Bus addressing
+
+The message bus (`coda send/recv/ack`) routes by **agent name**,
+which is the orchestrator slug, not the personality name from
+`SOUL.md`.
+
+- An orch named `codaclaw` may have `Name: Kit` in its SOUL — bus
+  messages still go to `codaclaw`.
+- An orch named `coda-core` may have `Name: Ash` in its SOUL — bus
+  messages go to `ash` (matching the registered orch name, not the
+  config-dir basename when they differ).
+- Source of truth: `coda agent ls` (v3) or `coda-core orchestrator
+  ls` (v2). The `name` column is the address.
+
+When sending, validate the recipient exists first. v3 enforces this
+via FK; v2 will silently accept unknown recipients and the message
+will never deliver. If a message is queued but `delivered=false`
+across multiple `recv` polls, suspect a typo or
+slug-vs-personality confusion before assuming the recipient is
+asleep.
+
 ## Review gates
 
 - No CI today. The only gate is local:

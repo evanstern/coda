@@ -155,6 +155,60 @@ containing directory is created if missing.
   and PR.
 - **One card, one PR.** Don't bundle unrelated changes.
 
+## Conventions for spawn agents
+
+- **Slicing pattern.** Build in slices that each pass `go build ./...
+  && go vet ./... && go test ./...`. One slice = one commit. Don't
+  ship a "wires it all up" commit at the end.
+- **Spec wins over brief.** When `IMPLEMENT.md` and
+  `docs/specs/<id>-<slug>.md` disagree, the spec is authoritative.
+- **Preamble strip.** If your prompt arrived with a `# FEATURE
+  SESSION` preamble, strip it before any commit message or PR body.
+  It's session metadata, not artifact content.
+- **`gh pr create --body`, not `--fill`.** `--fill` is broken in this
+  environment (silently truncates). Always pass `--body` with the
+  full PR body, ideally via heredoc or `--body-file`.
+- **TEARDOWN.md before exit.** If the card produced disposable
+  artifacts (smoke fixtures, scratch files, temp configs), write a
+  `TEARDOWN.md` listing them before reporting `PR ready`. The
+  orchestrator runs it on merge.
+- **Brief shape (canonical).** `IMPLEMENT.md` should be ~30-50 lines
+  and look like this:
+
+  ```markdown
+  # IMPLEMENT.md — #<id> <title>
+
+  Card: #<id>
+  Branch: <branch>
+  Worktree: <path>
+  Base: <sha>
+  Spec: docs/specs/<id>-<slug>.md  ← AUTHORITATIVE (when present)
+
+  ## Read first
+  1. docs/specs/<id>-<slug>.md (or "this brief" if no spec doc)
+  2. AGENTS.md
+  3. <other repo files this card needs>
+
+  ## Implementation slices
+  1. <slice 1>
+  2. <slice 2>
+  ...
+
+  ## Pre-PR checks specific to this card
+  - <card-specific gotchas not in AGENTS.md>
+
+  ## PR body template
+  <pre-formatted markdown>
+
+  Report `PR ready: <url>` when done.
+  ```
+
+  Anything that would apply to every card belongs in AGENTS.md, not
+  the brief. If you find yourself copy-pasting boilerplate into a
+  brief, that's a signal AGENTS.md is missing a convention.
+- **Report `PR ready: <url>` as your final line.** The orchestrator
+  watches for this pattern to know the card is complete.
+
 ## Review gates
 
 - No CI today. The only gate is local:

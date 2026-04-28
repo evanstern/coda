@@ -34,6 +34,32 @@ parses output from stdout. Non-zero exit codes become errors.
 
 `session.ProviderConfig` is an opaque `map[string]string`.
 
+### ProviderConfig key naming
+
+`ProviderConfig` is per-agent: each agent declares one provider and
+one config blob. The keys in that blob belong to exactly one
+provider's namespace, so collision across providers is impossible
+by construction.
+
+**Convention: use unprefixed keys.** A CodaClaw provider config
+uses `host_endpoint`, `image`, `mount_allowlist` — not
+`codaclaw_host`, `codaclaw_image`. The provider's identity is
+already implicit in the agent's `provider` field; restating it in
+every key is noise.
+
+Format notes:
+
+- Values are always strings. Structured types (lists, paths, ports)
+  serialize to strings — typically comma-separated for lists, with
+  whitespace around commas ignored.
+- Paths support `~/` expansion at the plugin layer; document the
+  expansion behavior per-key when relevant.
+- Names containing secrets (API keys, tokens) MUST refer to env
+  var names rather than embed the secret. `ProviderConfig`
+  serializes into `coda.db`; secrets do not belong there.
+  Convention: `<thing>_env` for env-var-name keys
+  (e.g. `anthropic_api_key_env: ANTHROPIC_API_KEY`).
+
 ## Error semantics
 
 - **Zero exit code** is success. Any other exit is an error; the

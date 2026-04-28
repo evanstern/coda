@@ -469,8 +469,24 @@ func startAgent(ctx context.Context, store *session.Store, msgStore *messages.St
 		return exitUserErr
 	}
 	if provSessID != "" {
-		if err := store.SetProviderSessionID(ctx, sess.ID, provSessID); err != nil {
-			fmt.Fprintf(stderr, "warn: provider started but recording its session id failed: %v\n", err)
+		if setErr := store.SetProviderSessionID(ctx, sess.ID, provSessID); setErr != nil {
+			// Best-effort cleanup: the provider session is running
+			// but we can't address it on a future Stop call (we'd
+			// fall back to coda's ULID, which is the bug this
+			// migration exists to prevent). Stop the orphan and
+			// mark the session row stopped so subsequent commands
+			// see consistent state.
+			cleanupErr := provider.Stop(provSessID)
+			if cleanupErr == nil {
+				if transErr := store.TransitionSession(ctx, sess.ID, session.StateCreated, session.StateStopped, "provider-id-record-failed"); transErr != nil {
+					cleanupErr = transErr
+				}
+			}
+			if cleanupErr != nil {
+				fmt.Fprintf(stderr, "error: provider started but recording its session id failed: %v; cleanup failed: %v\n", setErr, cleanupErr)
+				return exitUserErr
+			}
+			fmt.Fprintf(stderr, "error: provider started but recording its session id failed: %v; provider session %q was stopped\n", setErr, provSessID)
 			return exitUserErr
 		}
 		sess.ProviderSessionID = provSessID

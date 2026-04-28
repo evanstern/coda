@@ -359,3 +359,21 @@ func TestSetProviderSessionIDNotFound(t *testing.T) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
+
+func TestSetProviderSessionIDIdempotent(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+	if err := store.CreateAgent(ctx, session.Agent{Name: "a", Provider: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	id := session.NewSessionID()
+	if err := store.CreateSession(ctx, session.Session{ID: id, AgentName: "a", Provider: "stub", State: session.StateCreated}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProviderSessionID(ctx, id, "kit-default-01HXX"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProviderSessionID(ctx, id, "kit-default-01HXX"); err != nil {
+		t.Fatalf("re-setting same value should not error (SQLite reports RowsAffected=0 for no-op): %v", err)
+	}
+}

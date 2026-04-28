@@ -125,6 +125,11 @@ func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 // SetProviderSessionID records the provider's native session ID on
 // an existing session row. Called after Provider.Start returns. The
 // row must exist; ErrNotFound is returned otherwise.
+//
+// SQLite reports RowsAffected==0 for a no-op UPDATE (setting the
+// column to its existing value), so we can't use that as the
+// existence signal. Verify directly with a follow-up SELECT when
+// the UPDATE reports zero rows changed.
 func (s *Store) SetProviderSessionID(ctx context.Context, codaSessionID, providerSessionID string) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE sessions SET provider_session_id = ? WHERE id = ?`,
@@ -137,7 +142,13 @@ func (s *Store) SetProviderSessionID(ctx context.Context, codaSessionID, provide
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if n == 0 {
-		return ErrNotFound
+		var exists int
+		if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE id = ?`, codaSessionID).Scan(&exists); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("verify session existence: %w", err)
+		}
 	}
 	return nil
 }

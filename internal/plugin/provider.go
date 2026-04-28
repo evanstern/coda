@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -157,11 +158,17 @@ func (p *SubprocessProvider) Output(sessionID string, since *time.Time) ([]sessi
 	return msgs, nil
 }
 
-// Attach spawns "<exec> attach <sessionID>". Non-zero exit becomes an
-// error.
+// Attach spawns "<exec> attach <sessionID>" with the controlling
+// terminal's std streams inherited so the plugin's REPL or TUI can
+// drive the user's terminal directly. Non-zero exit becomes an
+// *exec.ExitError; stderr is not wrapped because it has already been
+// streamed to the terminal.
 func (p *SubprocessProvider) Attach(sessionID string) error {
-	_, err := p.runJSON(nil, "attach", sessionID)
-	return err
+	cmd := p.command("attach", sessionID)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 var _ session.Provider = (*SubprocessProvider)(nil)

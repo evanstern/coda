@@ -145,9 +145,13 @@ func TestSubprocessProvider_Output(t *testing.T) {
 }
 
 func TestSubprocessProvider_Attach(t *testing.T) {
-	p, _ := newProviderFixture(t, "attach")
+	p, logDir := newProviderFixture(t, "attach")
 	if err := p.Attach("sess-1"); err != nil {
 		t.Fatalf("Attach: %v", err)
+	}
+	args, _ := os.ReadFile(filepath.Join(logDir, "attach.args"))
+	if !strings.Contains(string(args), "sess-1") {
+		t.Fatalf("attach args missing sessionID: %q", args)
 	}
 }
 

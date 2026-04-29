@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/evanstern/coda/internal/db"
 	"github.com/evanstern/coda/internal/messages"
@@ -35,7 +34,7 @@ func (f *fakeProvider) Deliver(sessionID string, msg session.Message) (bool, err
 	return true, nil
 }
 func (f *fakeProvider) Health(_ string) (session.Status, error) { return session.Status{}, nil }
-func (f *fakeProvider) Output(_ string, _ *time.Time) ([]session.Message, error) {
+func (f *fakeProvider) Output(_ string, _ string) ([]session.Message, error) {
 	return nil, nil
 }
 func (f *fakeProvider) Attach(_ string) error { return nil }

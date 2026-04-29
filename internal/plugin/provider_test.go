@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/evanstern/coda/internal/session"
 )
@@ -50,7 +49,7 @@ case "$sub" in
     ;;
   output)
     printf '%s\n' "$@" > "$LOG_DIR/output.args"
-    printf '[{"ID":"m1","From":"x","To":"y","Type":"note","Body":"aGk=","CreatedAt":"2025-01-01T00:00:00Z"}]\n'
+    printf '[{"ID":"m1","From":"x","To":"y","Type":"note","Body":"aGk=","CreatedAt":"2025-01-01T00:00:00Z","Cursor":"seq:42"}]\n'
     ;;
   attach)
     printf '%s\n' "$@" > "$LOG_DIR/attach.args"
@@ -130,16 +129,18 @@ func TestSubprocessProvider_Health(t *testing.T) {
 
 func TestSubprocessProvider_Output(t *testing.T) {
 	p, logDir := newProviderFixture(t, "output")
-	since := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	msgs, err := p.Output("sess-1", &since)
+	msgs, err := p.Output("sess-1", "cursor-abc")
 	if err != nil {
 		t.Fatalf("Output: %v", err)
 	}
 	if len(msgs) != 1 || msgs[0].ID != "m1" {
 		t.Fatalf("msgs=%+v", msgs)
 	}
+	if msgs[0].Cursor != "seq:42" {
+		t.Fatalf("cursor=%q, want seq:42", msgs[0].Cursor)
+	}
 	args, _ := os.ReadFile(filepath.Join(logDir, "output.args"))
-	if !strings.Contains(string(args), "--since=2025-01-01T00:00:00Z") {
+	if !strings.Contains(string(args), "--since=cursor-abc") {
 		t.Fatalf("args=%q", args)
 	}
 }

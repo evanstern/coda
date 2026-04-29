@@ -14,8 +14,16 @@ parses output from stdout. Non-zero exit codes become errors.
 | `Stop(sessionID)`     | `stop <sessionID>`                  | (none)               | (none) — exit 0 on success                     |
 | `Deliver(sid, msg)`   | `deliver <sessionID>`               | message JSON         | `{"delivered": <bool>}`                        |
 | `Health(sid)`         | `health <sessionID>`                | (none)               | `{"State": "...", "Healthy": <bool>, "Detail": "..."}` |
-| `Output(sid, since?)` | `output <sessionID> [--since=<RFC3339>]` | (none)          | JSON array of `session.Message`                |
+| `Output(sid, since?)` | `output <sessionID> [--since=<cursor>]` | (none)          | JSON array of `session.Message`                |
 | `Attach(sid)`         | `attach <sessionID>`                | (none)               | (none) — exit 0 on success                     |
+
+## Cursor protocol
+
+The `--since=<cursor>` value is opaque to coda and plugin-defined.
+Each `session.Message` returned by `Output` may carry a `Cursor`
+field. Coda persists the most recent cursor from the response and
+echoes it back as `--since=` on the next call. An empty cursor (or
+omitted `--since`) means "from the beginning."
 
 ## JSON shapes
 
@@ -28,7 +36,8 @@ parses output from stdout. Non-zero exit codes become errors.
   "To": "agent-b",
   "Type": "note",
   "Body": "<base64-encoded bytes>",
-  "CreatedAt": "2025-01-01T00:00:00Z"
+  "CreatedAt": "2025-01-01T00:00:00Z",
+  "Cursor": "plugin-defined-opaque-value"
 }
 ```
 

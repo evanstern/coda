@@ -13,7 +13,7 @@ type Provider interface {
 	Stop(sessionID string) error
 	Deliver(sessionID string, msg Message) (delivered bool, err error)
 	Health(sessionID string) (Status, error)
-	Output(sessionID string, since *time.Time) ([]Message, error)
+	Output(sessionID string, since string) ([]Message, error)
 	Attach(sessionID string) error
 }
 
@@ -21,6 +21,9 @@ type Provider interface {
 // provider session. It is the same shape used by the messaging
 // primitive (card #170), defined here to keep the Provider interface
 // self-contained for now. Card #170 may move it.
+//
+// Cursor is opaque to coda — plugins define its format and coda
+// round-trips it unchanged between Output calls.
 type Message struct {
 	ID        string
 	From      string
@@ -28,6 +31,11 @@ type Message struct {
 	Type      string
 	Body      []byte
 	CreatedAt time.Time
+	// Cursor is an opaque, plugin-defined value for resuming
+	// Output(). Coda treats it as a black box — persist it from one
+	// call's response and echo it back on the next call's since
+	// argument. Empty string means "no cursor yet".
+	Cursor string
 }
 
 // Status is a provider-reported session health snapshot.

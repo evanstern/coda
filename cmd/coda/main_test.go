@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/evanstern/coda/internal/db"
 	"github.com/evanstern/coda/internal/messages"
@@ -43,7 +42,7 @@ func (s *stubProvider) Deliver(_ string, _ session.Message) (bool, error) {
 func (s *stubProvider) Health(_ string) (session.Status, error) {
 	return session.Status{State: "running", Healthy: true}, nil
 }
-func (s *stubProvider) Output(_ string, _ *time.Time) ([]session.Message, error) {
+func (s *stubProvider) Output(_ string, _ string) ([]session.Message, error) {
 	return nil, nil
 }
 func (s *stubProvider) Attach(_ string) error { return nil }

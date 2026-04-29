@@ -14,8 +14,23 @@ parses output from stdout. Non-zero exit codes become errors.
 | `Stop(sessionID)`     | `stop <sessionID>`                  | (none)               | (none) — exit 0 on success                     |
 | `Deliver(sid, msg)`   | `deliver <sessionID>`               | message JSON         | `{"delivered": <bool>}`                        |
 | `Health(sid)`         | `health <sessionID>`                | (none)               | `{"State": "...", "Healthy": <bool>, "Detail": "..."}` |
-| `Output(sid, since?)` | `output <sessionID> [--since=<RFC3339>]` | (none)          | JSON array of `session.Message`                |
+| `Output(sid, since?)` | `output <sessionID> [--since=<cursor>]` | (none)          | JSON array of `session.Message`                |
 | `Attach(sid)`         | `attach <sessionID>`                | (none)               | (none) — exit 0 on success                     |
+
+## Cursor protocol
+
+The `--since=<cursor>` value is opaque to coda and plugin-defined.
+Each `session.Message` returned by `Output` may carry a `Cursor`
+field. `Output` responses are ordered: plugins MUST return messages
+in the same stream order they want cursor advancement to follow
+(typically oldest to newest). Coda does not compare, sort, or
+otherwise interpret cursor values. After a successful `Output`
+call, coda persists the `Cursor` from the last message in the
+returned array whose `Cursor` is non-empty, and echoes that exact
+value back as `--since=` on the next call. If no returned message
+has a non-empty `Cursor`, coda leaves the persisted cursor
+unchanged. An empty cursor (or omitted `--since`) means "from the
+beginning."
 
 ## JSON shapes
 
@@ -28,7 +43,8 @@ parses output from stdout. Non-zero exit codes become errors.
   "To": "agent-b",
   "Type": "note",
   "Body": "<base64-encoded bytes>",
-  "CreatedAt": "2025-01-01T00:00:00Z"
+  "CreatedAt": "2025-01-01T00:00:00Z",
+  "Cursor": "plugin-defined-opaque-value"
 }
 ```
 

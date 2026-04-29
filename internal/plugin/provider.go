@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/evanstern/coda/internal/session"
 )
@@ -136,12 +135,12 @@ func (p *SubprocessProvider) Health(sessionID string) (session.Status, error) {
 	return s, nil
 }
 
-// Output spawns "<exec> output <sessionID> [--since=<rfc3339>]" and
+// Output spawns "<exec> output <sessionID> [--since=<cursor>]" and
 // parses a JSON array of session.Message.
-func (p *SubprocessProvider) Output(sessionID string, since *time.Time) ([]session.Message, error) {
+func (p *SubprocessProvider) Output(sessionID string, since string) ([]session.Message, error) {
 	args := []string{"output", sessionID}
-	if since != nil {
-		args = append(args, "--since="+since.UTC().Format(time.RFC3339Nano))
+	if since != "" {
+		args = append(args, "--since="+since)
 	}
 	out, err := p.runJSON(nil, args...)
 	if err != nil {

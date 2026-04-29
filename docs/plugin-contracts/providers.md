@@ -21,9 +21,16 @@ parses output from stdout. Non-zero exit codes become errors.
 
 The `--since=<cursor>` value is opaque to coda and plugin-defined.
 Each `session.Message` returned by `Output` may carry a `Cursor`
-field. Coda persists the most recent cursor from the response and
-echoes it back as `--since=` on the next call. An empty cursor (or
-omitted `--since`) means "from the beginning."
+field. `Output` responses are ordered: plugins MUST return messages
+in the same stream order they want cursor advancement to follow
+(typically oldest to newest). Coda does not compare, sort, or
+otherwise interpret cursor values. After a successful `Output`
+call, coda persists the `Cursor` from the last message in the
+returned array whose `Cursor` is non-empty, and echoes that exact
+value back as `--since=` on the next call. If no returned message
+has a non-empty `Cursor`, coda leaves the persisted cursor
+unchanged. An empty cursor (or omitted `--since`) means "from the
+beginning."
 
 ## JSON shapes
 

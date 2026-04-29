@@ -32,10 +32,16 @@ type Message struct {
 	Body      []byte
 	CreatedAt time.Time
 	// Cursor is an opaque, plugin-defined value for resuming
-	// Output(). Coda treats it as a black box — persist it from one
-	// call's response and echo it back on the next call's since
-	// argument. Empty string means "no cursor yet".
-	Cursor string
+	// Output(). Providers MUST return Output() messages in the
+	// same stream order they want cursor advancement to follow
+	// (typically oldest to newest). Coda does not compare, sort,
+	// or interpret cursor values; after a successful Output() call
+	// it persists the Cursor from the last message in the returned
+	// slice whose Cursor is non-empty, and echoes that exact value
+	// back on the next call's since argument. If no message in the
+	// slice has a non-empty Cursor, coda leaves the persisted
+	// cursor unchanged. Empty string means "no cursor yet".
+	Cursor string `json:",omitempty"`
 }
 
 // Status is a provider-reported session health snapshot.
